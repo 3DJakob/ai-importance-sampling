@@ -153,3 +153,4 @@ cython_debug/
 
 # Mac OS
 .DS_Store
+*.h5
