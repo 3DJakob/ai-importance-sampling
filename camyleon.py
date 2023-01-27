@@ -71,7 +71,8 @@ def train():
     # image = random.choice(images)
     image = images[randomIndex]
     flat = agent.imageToState(image)
-    final_move = agent.getAction(flat)
+    # final_move = agent.getAction(flat)
+    final_move = agent.getAction(image)
     move = 0
     reward = 0
     if final_move > 0.5:
@@ -82,10 +83,12 @@ def train():
       reward = 1
     else:
       reward = 0
+    # print("Move: " + str(move) + " Reward: " + str(reward) + " Has Cancer: " + str(hasCancer(randomIndex)))
     
     # Train short memory
     state_new = agent.getState(image) # has no effect
-    state_old = agent.getState(image)
+    # state_old = agent.getState(image)
+    state_old = torch.tensor(image, dtype=torch.float)
     agent.train_short_memory(state_old, final_move, reward, state_new, False)
 
     agent.n_iterations += 1
