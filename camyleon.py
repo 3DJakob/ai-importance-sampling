@@ -19,6 +19,7 @@ MAX_MEMORY = 100_000
 BATCH_SIZE = 1000
 LR = 0.001
 IMG_SIZE = 96
+HIDDEN_SIZE = 96 * 96
 
 class Agent:
   def __init__(self):
@@ -26,7 +27,8 @@ class Agent:
     self.epsilon = 0 # randomness
     self.gamma = 0.99 # discount rate
     self.memory = deque(maxlen=MAX_MEMORY)  # popleft()
-    self.model = Linear_QNet(IMG_SIZE * IMG_SIZE * 3, 256, 1)
+    self.model = Linear_QNet(IMG_SIZE * IMG_SIZE * 3, HIDDEN_SIZE, 1)
+
     self.trainer = QTrainer(self.model, lr=0.001, gamma=self.gamma)
 
     self.correctlyClassified = 0
