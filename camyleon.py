@@ -64,6 +64,8 @@ def train():
   agent = Agent()
 
   classifyPlot = []
+  rewardLast100 = []
+  meanLast100 = []
   rewardPlot = []
 
   while True:
@@ -92,12 +94,19 @@ def train():
     agent.train_short_memory(state_old, final_move, reward, state_new, False)
 
     agent.n_iterations += 1
-    agent.correctlyClassified += reward
-    classifyPlot.append(agent.correctlyClassified / agent.n_iterations)
-    rewardPlot.append(reward)
-
-    plot(classifyPlot, None)
-    # print(agent.n_iterations)
+    if agent.n_iterations % 100 == 0:
+      print("Iteration: " + str(agent.n_iterations) + " Reward: " + str(reward) + " Has Cancer: " + str(hasCancer(randomIndex)))
+    
+    # Uncomment to see the plot
+    # agent.correctlyClassified += reward
+    # classifyPlot.append(agent.correctlyClassified / agent.n_iterations)
+    # rewardLast100.append(reward)
+    # # if larger that 100 then remove the first element
+    # if len(rewardLast100) > 100:
+    #   rewardLast100.pop(0)
+    # rewardPlot.append(reward)
+    # meanLast100.append(sum(rewardLast100) / len(rewardLast100))
+    # plot(classifyPlot, meanLast100)
     
 
 
