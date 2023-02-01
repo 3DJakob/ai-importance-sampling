@@ -11,6 +11,8 @@ from torch.utils.data import DataLoader
 import h5py
 from torchvision.transforms import transforms
 from torch.utils.data import DataLoader
+import random
+from helper import plot
 
 # Loading and normalizing the data.
 # Define transformations for the training and test sets
@@ -107,11 +109,12 @@ def saveModel():
 def testAccuracy():
     model.eval()
     accuracy = 0.0
-    total = 0.0
+    correctImages = 0
     
     with torch.no_grad():
         test_size = 2000
-        for j in  range(0, test_size, batch_size):
+        
+        for j in range(0, test_size, batch_size):
             
 
             images = test_set.dataset['x'][j:j+batch_size]
@@ -123,13 +126,17 @@ def testAccuracy():
             labels = Variable(torch.tensor(labels, dtype=torch.float32).to(device))
             # run the model on the test set to predict labels
             outputs = model(images)
-            # the label with the highest energy will be our prediction
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            accuracy += (predicted == labels).sum().item()
+
+            # covert the outputs to 1 if greater than +0.5
+            outputs = torch.where(outputs > 0.5, 1, 0)
+
+            # if same number of predicted and labels, then add to accuracy
+            for i in range(len(outputs)):
+                if outputs[i] == labels[i]:
+                    correctImages += 1
+        accuracy = correctImages / test_size
     
     # compute the accuracy over all test images
-    accuracy = (100 * accuracy / total)
     return(accuracy)
 
 # Training function. 
@@ -143,13 +150,17 @@ def train(num_epochs):
     # Convert model parameters and buffers to CPU or Cuda
     model.to(device)
 
+    accuracyPlot = []
+
     for epoch in range(num_epochs):  # loop over the dataset multiple times
         print("Running Training epoch", epoch+1, '...')
         running_loss = 0.0
         running_acc = 0.0
         # size of the first 10000 images
-        size = 5000
+        size = 10000
+        
         for i in range(0, size, batch_size):
+            i = random.randint(0, 260000)
             # get the inputs
             images = train_set.dataset['x'][i:i+batch_size]
             labels = train_set_y.dataset['y'][i:i+batch_size]
@@ -168,12 +179,18 @@ def train(num_epochs):
             loss.backward()
             optimizer.step()
             
+
+            # print(torch.flatten(outputs.round()))
+            # print(torch.flatten(labels))
+
             # Print statistics for every 1,000 images
             running_loss += loss.item()     # extract the loss value
             running_acc += (torch.flatten(outputs).round() == torch.flatten(labels)).sum().item()
             
+            # print (running_acc)
+
             if i % 1000 == 0:  
-                # print every 1000 (twice per epoch) 
+                # print every 1000  
                 print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 1000))
                 print("running accuracy: ", running_acc/((i+1)*batch_size)*100, "%")
                 # zero the loss
@@ -188,8 +205,10 @@ def train(num_epochs):
         accuracy = testAccuracy()
         print()
         print('Epoch ', epoch+1)
-        print('test accuracy over the test set is %d %%' % (accuracy/10))
-        print('training accuracy is %d %%' % (running_acc))
+        print('test accuracy over the test set is %f %%' % (accuracy*100))
+        accuracyPlot.append(accuracy)
+        plot(accuracyPlot, None)
+        # print('training accuracy is %d %%' % (running_acc))
         
         # we want to save the model if the accuracy is the best
         if accuracy > best_accuracy:
@@ -240,7 +259,7 @@ if __name__ == "__main__":
     
     # Let's load the model we just created and test the accuracy per label
     model = Network()
-    path = "model.pth"
+    path = "myFirstModel.pth"
     model.load_state_dict(torch.load(path))
 
     # Test with batch of images
