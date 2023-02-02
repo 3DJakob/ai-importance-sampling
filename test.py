@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from helper import getTestAnswers
+from helper import getTestAnswers, getTestData
 
 class StatusNN(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes=1):
@@ -19,13 +19,13 @@ class StatusNN(nn.Module):
         x = self.fc3(x)      # [batch_size, 1]
         return x
 
-model = StatusNN(10, 512)
-data = torch.randn(64, 10)
-target = getTestAnswers(64)
+BATCH_SIZE = 1
+
+[data, target] = getTestData(64, BATCH_SIZE)
+model = StatusNN(BATCH_SIZE * 3 * 96 * 96, 512) # 27648
+# target = getTestAnswers(64)
 criterion = nn.BCEWithLogitsLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-
-print(target)
 
 for epoch in range(100):
     optimizer.zero_grad()
