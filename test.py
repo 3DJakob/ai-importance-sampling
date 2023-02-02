@@ -12,6 +12,7 @@ class StatusNN(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, x):
+        x = x.flatten(start_dim=1)
         x = self.fc1(x)      # [batch_size, 512] 
         x = self.relu(x)     # [batch_size, 512]
         x = self.fc2(x)      # [batch_size, 64]
@@ -23,7 +24,7 @@ class StatusNN(nn.Module):
 
 # [data, target] = getTestData(64, True)
 # model = StatusNN(3 * 96 * 96, 512) # 27648
-model = Linear_QNet(3 * 96 * 96, 512) # 27648
+model = StatusNN(3 * 96 * 96, 512) # 27648
 # target = getTestAnswers(64)
 criterion = nn.BCEWithLogitsLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)

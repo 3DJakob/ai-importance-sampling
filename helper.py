@@ -77,11 +77,11 @@ def getTestAnswers(size):
 
 def getTestData(size, randomize = True):       
     data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=32, shuffle=True)
-    # grandTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
+    # groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
     images = data.dataset['x']
 
     # Flat all images
-    data = torch.randn(size, 3 * 96 * 96) # 64 samples, 3 channels, 96x96 image
+    data = torch.zeros(size, 3, 96, 96) # 64 samples, 3 channels, 96x96 image
     target = torch.zeros(size, 1) # 64 samples, 10 correct answers
 
     for i in range(0, size):
@@ -93,7 +93,10 @@ def getTestData(size, randomize = True):
         # print(dataIndex, 'dataIndex')
         img = images[dataIndex]
         tensorData = torch.tensor(img, dtype=torch.float)
-        data[i] = torch.flatten(tensorData)
+        # permute [96, 96, 3] to [3, 96, 96]
+        tensorData = tensorData.permute(2, 0, 1)
+        # insert into data
+        data[i] = tensorData
         target[i] = hasCancer(dataIndex)
     
     
