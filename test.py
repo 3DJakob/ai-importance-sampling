@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from helper import getTestAnswers, getTestData
+from helper import getTestAnswers, getTestData, plot
 
 class StatusNN(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes=1):
@@ -19,15 +19,19 @@ class StatusNN(nn.Module):
         x = self.fc3(x)      # [batch_size, 1]
         return x
 
-BATCH_SIZE = 1
+# BATCH_SIZE = 1
 
-[data, target] = getTestData(64, BATCH_SIZE)
-model = StatusNN(BATCH_SIZE * 3 * 96 * 96, 512) # 27648
+# [data, target] = getTestData(64, True)
+# model = StatusNN(3 * 96 * 96, 512) # 27648
+model = Linear_QNet(3 * 96 * 96, 512) # 27648
 # target = getTestAnswers(64)
 criterion = nn.BCEWithLogitsLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-for epoch in range(100):
+accuracyPlot = []
+
+for epoch in range(10000):
+    [data, target] = getTestData(64, True)
     optimizer.zero_grad()
     print("Epoch: ", epoch)
 
@@ -46,9 +50,23 @@ for epoch in range(100):
     accuracy = 0
     # test model
     with torch.no_grad():
+        [data, target] = getTestData(64, False)
         output = model(data)
         output = torch.sigmoid(output)
         output = (output > 0.5).float()
         accuracy = (output == target).float().mean()
         print("Accuracy: ", accuracy)
+        accuracyPlot.append(accuracy)
+        plot(accuracyPlot, None)
+    
+
+
+    # accuracy = 0
+    # # test model
+    # with torch.no_grad():
+    #     output = model(data)
+    #     output = torch.sigmoid(output)
+    #     output = (output > 0.5).float()
+    #     accuracy = (output == target).float().mean()
+    #     print("Accuracy: ", accuracy)
 

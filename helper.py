@@ -40,7 +40,7 @@ def evaluate(agent):
 
             state0 = torch.tensor(image, dtype=torch.float)
             prediction = agent.model(state0)
-            print(prediction)
+            # print(prediction, 'prediction')
             # action = prediction.item()
             action = prediction
             # final_move = move
@@ -75,22 +75,26 @@ def getTestAnswers(size):
         answers[i] = hasCancer(i)
     return answers
 
-def getTestData(size, batch_size=10):       
+def getTestData(size, randomize = True):       
     data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=32, shuffle=True)
     # grandTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
     images = data.dataset['x']
 
     # Flat all images
-    data = torch.randn(size, batch_size * 3 * 96 * 96) # 64 samples, 10 channels, 96x96 image
-    target = torch.randn(size, batch_size) # 64 samples, 10 correct answers
+    data = torch.randn(size, 3 * 96 * 96) # 64 samples, 3 channels, 96x96 image
+    target = torch.zeros(size, 1) # 64 samples, 10 correct answers
 
     for i in range(0, size):
-        # get 10 images
-        imgs = images[i * batch_size : i * batch_size + batch_size]
-        tensorData = torch.tensor(imgs, dtype=torch.float)
+        dataIndex = i
+        # print('randomize', randomize)
+        if randomize == True:
+            datasize = images.shape[0]
+            dataIndex = torch.randint(65, datasize, (1,)).item()
+        # print(dataIndex, 'dataIndex')
+        img = images[dataIndex]
+        tensorData = torch.tensor(img, dtype=torch.float)
         data[i] = torch.flatten(tensorData)
-        for j in range(0, batch_size):
-            target[i][j] = hasCancer(i * batch_size + j)
+        target[i] = hasCancer(dataIndex)
     
     
     
