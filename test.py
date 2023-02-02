@@ -24,7 +24,7 @@ class StatusNN(nn.Module):
 class Linear_QNet(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes=1):
         super().__init__()
-        output_size = 1
+        output_size = 2
         self.conv1 = nn.Conv2d(3, 8, kernel_size=3, stride=1)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(8, 16, kernel_size=3, stride=1)
@@ -59,7 +59,9 @@ BATCH_SIZE = 64
 # model = StatusNN(3 * 96 * 96, 512) # 27648
 model = Linear_QNet(3 * 96 * 96, 512) # 27648
 # target = getTestAnswers(64)
-criterion = nn.BCEWithLogitsLoss()
+# criterion = nn.BCEWithLogitsLoss()
+criterion = nn.CrossEntropyLoss()
+
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 accuracyPlot = []
@@ -68,7 +70,7 @@ meanAccuracyPlot = []
 
 for epoch in range(10000):
     
-    [data, target] = getTestData(64, True)
+    [data, target] = getTestData(BATCH_SIZE, True)
     for i in range(BATCH_SIZE):
         optimizer.zero_grad()
         # print("Epoch: ", epoch)
@@ -77,7 +79,11 @@ for epoch in range(10000):
         # print("Input size: ", data[i].size())
         output = model(data[i])
         # print("Output size: ", output.size())
-        loss = criterion(output, target[i])
+        # if target is one [0, 1] if target is zero [1, 0]
+        t = torch.zeros(2)
+        t[int(target[i])] = 1
+
+        loss = criterion(output, t)
         # print("Loss: ", loss.item())
         
         # backward pass
