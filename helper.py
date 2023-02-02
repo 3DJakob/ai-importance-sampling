@@ -17,7 +17,7 @@ def plot(meanCorrectlyClassified, correctlyClassified):
     display.display(plt.gcf())
     plt.clf()
     plt.title('Training...')
-    plt.xlabel('Number of Images')
+    plt.xlabel('Number of Batches')
     plt.ylabel('Score')
     plt.ylim(ymin=0)
     if correctlyClassified is not None:
