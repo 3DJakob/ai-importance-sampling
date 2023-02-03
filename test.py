@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from helper import getTestAnswers, getTestData, plot, getTestDataVector
+from helper import getTestAnswers, getTestData, plot, getTestDataVector, getEvaluationData
 import torchvision
 import torchvision.transforms as transforms
 from torchvision.models.vgg import VGG16_Weights
@@ -57,6 +57,12 @@ class Linear_QNet(nn.Module):
         # x = self.softmax(x)
         return x
 
+    def save(self):
+        torch.save(self.state_dict(), 'mymodel.pth')
+    
+    def load(self):
+        self.load_state_dict(torch.load('mymodel.pth'))
+
 class VGG(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes=1):
         super().__init__()
@@ -84,8 +90,8 @@ class VGG(nn.Module):
         return x
 
 
-BATCH_SIZE = 1000
-TESTSIZE = 1000
+BATCH_SIZE = 2000
+TESTSIZE = 2000
 
 # [data, target] = getTestData(64, True)
 # model = StatusNN(3 * 96 * 96, 512) # 27648
@@ -103,6 +109,7 @@ accuracyPlot = []
 lastMeanAccuracy = 0
 meanAccuracyPlot = []
 predictionRatioPlot = []
+bestAccuracy = 0
 
 for epoch in range(10000):
     model.train()
@@ -125,29 +132,23 @@ for epoch in range(10000):
         optimizer.step()
     meanLoss /= BATCH_SIZE
     print("Mean Loss: ", meanLoss)
-    # [data, target] = getTestData(64, True)
-    # optimizer.zero_grad()
-    # print("Epoch: ", epoch)
-
-    # # forward pass
-    # print("Input size: ", data.size())
-    # output = model(data)
-    # print("Output size: ", output.size())
-    # loss = criterion(output, target)
-    # print("Loss: ", loss.item())
-    
-    # # backward pass
-    # loss.backward()
-    # optimizer.step()
 
     model.eval()
+
+
+    # load model    
+    # model.load()
+
+
     accuracy = 0
     predictionRatio = 0
     # test model
     with torch.no_grad():
         print("Epoch: ", epoch)
         accuracy= 0
-        [data, target] = getTestDataVector(TESTSIZE, False)
+        [data, target] = getEvaluationData(TESTSIZE)
+        # [data, target] = getEvaluationData(None)
+
         for i in range(TESTSIZE):
             output = model(data[i])
             output = torch.sigmoid(output)
@@ -164,5 +165,10 @@ for epoch in range(10000):
         predictionRatio = predictionRatio / TESTSIZE
         predictionRatioPlot.append(predictionRatio)
         plot(accuracyPlot, predictionRatioPlot)
+
+        if accuracy > bestAccuracy and predictionRatio > 0.4 and predictionRatio < 0.6:
+            bestAccuracy = accuracy
+            model.save()
+            print("Saved model with accuracy: ", accuracy)
     
 

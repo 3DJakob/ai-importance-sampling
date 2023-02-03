@@ -131,3 +131,30 @@ def getTestDataVector(size, randomize = True):
     
     
     return [data, target]
+
+
+def getEvaluationData(size):
+    data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=32, shuffle=True)
+    groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=32, shuffle=True)
+    
+    images = data.dataset['x']
+    
+    if size == None:
+        size = images.shape[0]
+
+    # Flat all images
+    data = torch.zeros(size, 3, 96, 96).to(device)
+    target = torch.zeros(size, 2).to(device)
+
+    for i in range(0, size):
+        img = images[i]
+        tensorData = torch.tensor(img, dtype=torch.float)
+        tensorData = tensorData.permute(2, 0, 1)
+
+        data[i] = tensorData
+        if (groundTruth.dataset['y'][i][0][0][0] == 1):
+            target[i] = torch.tensor([0, 1])
+        else:
+            target[i] = torch.tensor([1, 0])
+    
+    return [data, target]
