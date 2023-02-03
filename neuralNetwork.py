@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
+from torchvision import datasets, transforms
 from torch.optim import Adam
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,88 +11,121 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import h5py
 from torchvision.transforms import transforms
-from torch.utils.data import DataLoader
 import random
 from helper import plot
+from display import *
+from torch import Tensor
 
-# Loading and normalizing the data.
-# Define transformations for the training and test sets
-transformations = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-])
 
-batch_size = 10
+
+
+batch_size = 100
 number_of_labels = 2
+test_size = 3000
+train_size = 10000
 
 # Create an instance for training. 
-train_set = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=32, shuffle=True)
-train_set_y = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
+train_set_data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=batch_size, shuffle=True)
+train_set_labels = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=batch_size, shuffle=True)
+
+# Create an instance for testing, shuffle is set to False.
+test_set_data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=batch_size, shuffle=False)
+test_set_labels = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=batch_size, shuffle=False)
+
+print("The number of images in a training set is: ", len(train_set_data.dataset['x']))
+print("The number of images in a test set is: ", len(test_set_data.dataset['x']))
 
 
-
-# Create a loader for the training set 
-# shuffle true
-# train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=0)
-print("The number of images in a training set is: ", len(train_set)*batch_size)
-
-# Create an instance for testing, note that train is set to False.
-test_set = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=32, shuffle=False)
-test_set_y = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=32, shuffle=False)
-
-# only use first 1000 images
-# train_set = train_set.dataset['x'][0:10000]
-# train_set_y = train_set_y.dataset['y'][0:10000]
-
-
-# Create a loader for the test set 
-# Note that each shuffle is set to false for the test loader.
-# test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=0)
-print("The number of images in a test set is: ", len(test_set)*batch_size)
-
-print("The number of batches per epoch is: ", len(train_set))
-print(train_set.dataset['x'])
 classes = ('cancer', 'no cancer')
 
  # Define your execution device
 device = torch.device("mps")
 print("The model will be running on", device, "device")
 
+# initialize the network weights with He
+def init_weights(m):
+    if type(m) == nn.Conv2d:
+        torch.nn.init.kaiming_normal_(m.weight)
+        m.bias.data.fill_(0.01)
+
 # This network applies two 2D convolutional layers to reduce the input size from 96x96 to 24x24, 
 # and then applies max pooling to reduce it further to 8x8. The output is then vectorized and 
-# passed through a fully connected layer before the final output is produced.
+# passed through some fully connected layers before the final output is produced.
 
 class Network(nn.Module):
     def __init__(self):
         super(Network, self).__init__()
+        #initialize the network weights
+        self.apply(init_weights)
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=12, kernel_size=5, stride=1, padding=1).to(device)
         self.bn1 = nn.BatchNorm2d(12).to(device)
-        self.conv2 = nn.Conv2d(in_channels=12, out_channels=12, kernel_size=5, stride=1, padding=1).to(device)
-        self.bn2 = nn.BatchNorm2d(12).to(device)
+        self.conv2 = nn.Conv2d(in_channels=12, out_channels=24, kernel_size=3, stride=1, padding=1).to(device)
+        self.bn2 = nn.BatchNorm2d(24).to(device)
 
         self.pool = nn.MaxPool2d(2, 2).to(device)
         
-        self.conv4 = nn.Conv2d(in_channels=12, out_channels=24, kernel_size=5, stride=1, padding=1).to(device)
-        self.bn4 = nn.BatchNorm2d(24).to(device)
+        self.conv4 = nn.Conv2d(in_channels=24, out_channels=48, kernel_size=3, stride=1, padding=1).to(device)
+        self.bn4 = nn.BatchNorm2d(48).to(device)
 
-        self.conv5 = nn.Conv2d(in_channels=24, out_channels=24, kernel_size=5, stride=1, padding=1).to(device)
-        self.bn5 = nn.BatchNorm2d(24).to(device)
+        self.conv5 = nn.Conv2d(in_channels=48, out_channels=64, kernel_size=3, stride=1, padding=1).to(device)
+        self.bn5 = nn.BatchNorm2d(64).to(device)
 
-        self.fc1 = nn.Linear(24*42*42, 1).to(device)
+        self.conv6 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1).to(device)
+        self.bn6 = nn.BatchNorm2d(128).to(device)
+
+
+        self.fc1 = nn.Linear(3200, 1280).to(device)
+        self.fc2 = nn.Linear(1280, 256).to(device)
+        self.fc3 = nn.Linear(256, 128).to(device)
+        self.fc4 = nn.Linear(128, 2).to(device)
 
     def forward(self, x):
+        
         x = torch.permute(x, (0, 3, 1, 2)).to(device)
         # print("permute shape: ", x.shape)
 
         x = F.relu(self.bn1(self.conv1(x))).to(device)    
-        x = F.relu(self.bn2(self.conv2(x))).to(device)   
-        x = self.pool(x).to(device)                        
-        x = F.relu(self.bn4(self.conv4(x))).to(device)     
+        # print("first conv shape: ", x.shape)
+        
+        x = F.relu(self.bn2(self.conv2(x))).to(device)
+        # print("second conv shape: ", x.shape)   
+        
+        x = self.pool(x).to(device)
+        # print("pool shape: ", x.shape)   
+        
+        x = F.relu(self.bn4(self.conv4(x))).to(device)
+        # print("fourth conv shape: ", x.shape)
+        
+        x = self.pool(x).to(device)
+        # print("pool shape: ", x.shape)
+
         x = F.relu(self.bn5(self.conv5(x))).to(device)   
-          
-        x = x.contiguous().view(x.size(0), -1).to(device)
-        x = self.fc1(x).to(device)
-        # print("Model output shape: ", x.shape)
+        # print("fifth conv shape: ", x.shape)
+        
+        x = self.pool(x).to(device)
+        # print("pool shape: ", x.shape)
+
+        x = F.relu((self.conv6(x))).to(device)
+        # print("sixth conv shape: ", x.shape)
+
+        x = self.pool(x).to(device)
+
+        x = x.view(x.size(0), -1).to(device)
+        # print("view shape: ", x.shape)
+
+        x = F.relu(self.fc1(x).to(device)).to(device)
+        # print("fc1 shape: ", x.shape)
+
+        x = F.relu(self.fc2(x).to(device)).to(device)
+        # print("fc2 shape: ", x.shape)
+
+        x = F.relu(self.fc3(x).to(device)).to(device)
+        # print("fc3 shape: ", x.shape)
+
+
+        x = self.fc4(x).to(device)
+        # print("Model output values: ", x.shape)
+        
         return x
 
 model = Network()
@@ -99,11 +133,33 @@ model = Network()
 
 
 loss_fn = nn.CrossEntropyLoss()
-optimizer = Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
+optimizer = Adam(model.parameters(), lr=0.001)#, weight_decay=0.0001
 
 def saveModel():
     path = "./myFirstModel.pth"
     torch.save(model.state_dict(), path)
+
+def printProgressBar (iteration, total, length, prefix = '', suffix = '', decimals = 1, fill = '█', printEnd = "\r"):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    # Print New Line on Complete
+    if iteration >= total: 
+        print()
+
 
 # Function to test the model with the test dataset and print the accuracy for the test images
 def testAccuracy():
@@ -111,31 +167,87 @@ def testAccuracy():
     accuracy = 0.0
     correctImages = 0
     
+    
     with torch.no_grad():
-        test_size = 2000
-        
+        predictedTrue = 0
+        predictedFalse = 0
+        test_counter = 0
+        inverted_counter = 0
         for j in range(0, test_size, batch_size):
             
-
-            images = test_set.dataset['x'][j:j+batch_size]
-            labels = test_set_y.dataset['y'][j:j+batch_size]
-
+            images = test_set_data.dataset['x'][j:j+batch_size]
+            labels = test_set_labels.dataset['y'][j:j+batch_size]
+            #add row to labels that inverts the labels
+            labels = np.column_stack((labels, np.logical_not(labels)))
+            # reshape the labels to be a 2x10 matrix
+            labels = labels.reshape(batch_size, 2)
 
             #convert images to tensor
             images = Variable(torch.tensor(images, dtype=torch.float32).to(device))
+            #normalize the images
+            images = images / 255.0
             labels = Variable(torch.tensor(labels, dtype=torch.float32).to(device))
+            
             # run the model on the test set to predict labels
             outputs = model(images)
 
-            # covert the outputs to 1 if greater than +0.5
-            outputs = torch.where(outputs > 0.5, 1, 0)
+            # one-hot encode the outputs
+            outputs = torch.nn.functional.one_hot(torch.argmax(outputs, dim=1), num_classes=2).to(device)
+            
+            
+            # print(outputsMask)
+            
 
+            # print("test phase outputs: ", outputs)
+            # print("test phase labels: ", labels)
+            # Tensor.cpu(outputs)
+            
+            values, counts = torch.unique(outputs[outputs == labels], return_counts=True)
+            # Tensor.cpu(counts)
+            # # print(values)
+            # print(counts)
+            # extract item from tensor to int
+            # inverted_counter += len(outputs) - counts[0].item()
+            correctImages += counts[0].item()
+            
+            # print("correct images count: ", correctImages)
+            # print("inverted count: ", inverted_counter)
+
+
+            #compare the outputs to the labels
+            outputs.unsqueeze(0) 
+            # print((outputs == labels).all(dim=1).nonzero().size(0))
+
+            # add to test_counter with batch size
+            test_counter += batch_size
+
+            # argmax to outputs
+            # outputs = torch.argmax(outputs, dim=1)
+        
+            # print("Labels print:", labels)
+            # print("Outputs print:", outputs)
+            # print("Label first row", labels[0])
+            # print("Label first row", labels[0][0])
+            # print("Output first row", outputs[0])        
+            # print("all labels:",labels)
             # if same number of predicted and labels, then add to accuracy
-            for i in range(len(outputs)):
-                if outputs[i] == labels[i]:
-                    correctImages += 1
-        accuracy = correctImages / test_size
-    
+            # for i in range(len(outputs)):
+            #     # print outputs rows
+                
+            
+                
+            
+                
+            
+            printProgressBar(test_counter, test_size, prefix = ' Testing:', suffix = 'Complete', length = 10)
+
+            
+            
+       
+        # compute the accuracy over all test images
+        accuracy = correctImages / test_size 
+    print(correctImages, 'correct images out of', test_size, 'images. Accuracy %.2f %%' % (correctImages/test_size*100))
+    # print('Epoch predicted True:', predictedTrue, ', False:', predictedFalse)
     # compute the accuracy over all test images
     return(accuracy)
 
@@ -144,78 +256,77 @@ def testAccuracy():
 def train(num_epochs):
     
     best_accuracy = 0.0
-
-    
-
+    accuracyPlot = []
     # Convert model parameters and buffers to CPU or Cuda
     model.to(device)
 
-    accuracyPlot = []
-
+    # Train the model
     for epoch in range(num_epochs):  # loop over the dataset multiple times
-        print("Running Training epoch", epoch+1, '...')
+        model.train()
+        print('Epoch ', epoch+1)
         running_loss = 0.0
         running_acc = 0.0
-        # size of the first 10000 images
-        size = 10000
+        batchCounter = 0
         
-        for i in range(0, size, batch_size):
+        for i in range(0, train_size, batch_size):
             i = random.randint(0, 260000)
             # get the inputs
-            images = train_set.dataset['x'][i:i+batch_size]
-            labels = train_set_y.dataset['y'][i:i+batch_size]
-            
-            # Convert to torch tensors with the float32 data type
+            images = train_set_data.dataset['x'][i:i+batch_size]
+            labels = train_set_labels.dataset['y'][i:i+batch_size]
+            #add row to labels that inverts the labels
+            labels = np.column_stack((labels, np.logical_not(labels)))
+            # reshape the labels to be a 2x10 matrix
+            labels = labels.reshape(batch_size, 2)
+           
+            # convert to torch tensors with the float32 data type
             images = Variable(torch.tensor(images, dtype=torch.float32).to(device))
+            #normalize the images
+            images = images / 255.0
             labels = Variable(torch.tensor(labels, dtype=torch.float32).to(device))
-
+            # print("train phase labels print: ", labels)
             # zero the parameter gradients
             optimizer.zero_grad()
-            # print("images:___ ",images.shape)
-            # forward + backward + optimize
+
             outputs = model(images)
-            # print("flat: ", torch.flatten(outputs))
-            loss = loss_fn(torch.flatten(outputs), torch.flatten(labels))#.unsqueeze(1).long()
+            # print("train phase outputs: ", torch.flatten(outputs))
+            # print("train phase labels: ", torch.flatten(labels))
+
+            # compute the loss
+            loss = loss_fn(torch.flatten(outputs), torch.flatten(labels))
             loss.backward()
             optimizer.step()
-            
-
-            # print(torch.flatten(outputs.round()))
-            # print(torch.flatten(labels))
 
             # Print statistics for every 1,000 images
             running_loss += loss.item()     # extract the loss value
-            running_acc += (torch.flatten(outputs).round() == torch.flatten(labels)).sum().item()
+            # running_acc += (torch.flatten(outputs).round() == torch.flatten(labels)).sum().item()
             
-            # print (running_acc)
+            batchCounter = batchCounter + 1
+            # print(" Epoch", epoch+1, '(', round( (batchCounter*batch_size)/size*100), '%)', end='\r') 
+            printProgressBar(batchCounter*batch_size, train_size, prefix = ' Training:', suffix = 'Complete', length = 50)           
+            
+            # if batchCounter/batch_size % 1000 == 0:  
+            #     # print every 1000  
+            #     print('Epoch [%d/%d], Interval [%d/%d], Loss: %.4f'
+            #         %(epoch+1, num_epochs, i+1, i+batch_size, running_loss / 1000))
 
-            if i % 1000 == 0:  
-                # print every 1000  
-                print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 1000))
-                print("running accuracy: ", running_acc/((i+1)*batch_size)*100, "%")
-                # zero the loss
-                running_loss = 0.0
-                running_acc = 0.0
-            
-            
-            
-
-        # Compute and print the average accuracy fo this epoch when tested over all 10000 test images
-        print("testing accuracy.. ")
+            #     # zero the loss
+            #     running_loss = 0.0
+            #     running_acc = 0.0
+    
         accuracy = testAccuracy()
-        print()
-        print('Epoch ', epoch+1)
-        print('test accuracy over the test set is %f %%' % (accuracy*100))
-        accuracyPlot.append(accuracy)
-        plot(accuracyPlot, None)
-        # print('training accuracy is %d %%' % (running_acc))
-        
-        # we want to save the model if the accuracy is the best
+        # print('test accuracy over the test set is %f %%' % (accuracy*100))
+
+        # Save the model if the accuracy is the best
         if accuracy > best_accuracy:
+            print('Saving the model with accuracy %f %%' % (accuracy))
             saveModel()
             best_accuracy = accuracy
-
-
+        accuracyPlot.append(accuracy)
+        plot(accuracyPlot, None)
+        print()
+        # print('training accuracy is %d %%' % (running_acc))
+        
+        
 
 
 # Function to show the images
@@ -225,42 +336,57 @@ def imageshow(img):
     plt.imshow(np.transpose(npimg, (1, 2, 0)))
     plt.show()
 
+def show(inp, label):
+    """Imshow for Tensor."""
+    inp = inp.numpy().transpose((1, 2, 0))
+    mean = np.array([0.5, 0.5, 0.5])
+    std = np.array([0.5, 0.5, 0.5])
+    inp = std * inp + mean
+    plt.imshow(inp)
+    plt.title(label)
+    plt.pause(5)  # pause a bit so that plots are updated
+
 
 # Function to test the model with a batch of images and show the labels predictions
 def testBatch():
-    # get batch of images from the test DataLoader  
-    images, labels = next(iter(test_set))
+    # get batch of images from the test_set
+    images = test_set_data.dataset['x'][0:batch_size]
+    labels = test_set_labels.dataset['y'][0:batch_size]
 
+    #convert entries to images
+
+    images = Variable(torch.tensor(images, dtype=torch.float32))
+    labels = Variable(torch.tensor(labels, dtype=torch.float32))
+
+    #permute the images to be in the correct format
+    images = images.permute(0, 3, 1, 2)
+    images = images / 255.0
+    print (images.shape)
+
+    labels = labels.flatten()
+    #convert to integers    
+    labels = labels.type(torch.LongTensor)
+    
     # show all images as one image grid
-    imageshow(torchvision.utils.make_grid(images))
-   
-    # Show the real labels on the screen 
-    print('Real labels: ', ' '.join('%5s' % classes[labels[j]] 
-                               for j in range(batch_size)))
-  
-    # Let's see what if the model identifiers the  labels of those example
-    outputs = model(images)
+    grid = torchvision.utils.make_grid(images, nrow=25)
+    show(grid, label='GroundTruth: ' + ' '.join('%5s' % classes[labels[j]] for j in range(batch_size)))
     
-    # We got the probability for every 10 labels. The highest (max) probability should be correct label
-    _, predicted = torch.max(outputs, 1)
-    
-    # Let's show the predicted labels on the screen to compare with the real ones
-    print('Predicted: ', ' '.join('%5s' % classes[predicted[j]] 
-                              for j in range(batch_size)))
+    #save images
+    torchvision.utils.save_image(grid, 'test.png')
 
 if __name__ == "__main__":
-    
     # Build model
-    train(10)
+    train(50)
     print('Finished Training')
 
     # Test which classes performed well
-    testAccuracy()
+    # testAccuracy()
     
     # Let's load the model we just created and test the accuracy per label
     model = Network()
     path = "myFirstModel.pth"
-    model.load_state_dict(torch.load(path))
 
+    model.load_state_dict(torch.load(path))
+    print('Model loaded from %s' % path)
     # Test with batch of images
     testBatch()
