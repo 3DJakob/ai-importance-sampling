@@ -2,7 +2,7 @@ import torch
 import h5py
 import matplotlib.pyplot as plt
 from IPython import display
-
+device = torch.device('cpu')
 
 groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
 
@@ -70,7 +70,7 @@ guesses = torch.zeros(testSize)
 
 
 def getTestAnswers(size):
-    answers = torch.zeros(size, 1)
+    answers = torch.zeros(size, 1).to(device)
     for i in range(0, size):
         answers[i] = hasCancer(i)
     return answers
@@ -81,15 +81,15 @@ def getTestData(size, randomize = True):
     images = data.dataset['x']
 
     # Flat all images
-    data = torch.zeros(size, 3, 96, 96) # 64 samples, 3 channels, 96x96 image
-    target = torch.zeros(size, 1) # 64 samples, 10 correct answers
+    data = torch.zeros(size, 3, 96, 96).to(device) # 64 samples, 3 channels, 96x96 image
+    target = torch.zeros(size, 1).to(device) # 64 samples, 10 correct answers
 
     for i in range(0, size):
         dataIndex = i
         # print('randomize', randomize)
         if randomize == True:
             datasize = images.shape[0]
-            dataIndex = torch.randint(65, datasize, (1,)).item()
+            dataIndex = torch.randint(1000, datasize, (1,)).item()
         # print(dataIndex, 'dataIndex')
         img = images[dataIndex]
         tensorData = torch.tensor(img, dtype=torch.float)
@@ -98,7 +98,36 @@ def getTestData(size, randomize = True):
         # insert into data
         data[i] = tensorData
         target[i] = hasCancer(dataIndex)
-    
+
+
+def getTestDataVector(size, randomize = True):       
+    data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=32, shuffle=True)
+    # groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
+    images = data.dataset['x']
+
+    # Flat all images
+    data = torch.zeros(size, 3, 96, 96).to(device) # 64 samples, 3 channels, 96x96 image
+    target = torch.zeros(size, 2).to(device) # 64 samples, 10 correct answers
+
+    for i in range(0, size):
+        dataIndex = i
+        # print('randomize', randomize)
+        if randomize == True:
+            datasize = images.shape[0]
+            dataIndex = torch.randint(1000, datasize, (1,)).item()
+        # print(dataIndex, 'dataIndex')
+        img = images[dataIndex]
+        tensorData = torch.tensor(img, dtype=torch.float)
+        # permute [96, 96, 3] to [3, 96, 96]
+        tensorData = tensorData.permute(2, 0, 1)
+        # Scale to 0-1
+        tensorData = tensorData / 255
+        # insert into data
+        data[i] = tensorData
+        if hasCancer(dataIndex) == 1:
+            target[i] = torch.tensor([0, 1])
+        else:
+            target[i] = torch.tensor([1, 0])    
     
     
     return [data, target]
