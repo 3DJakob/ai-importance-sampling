@@ -8,6 +8,11 @@ from torchvision.models.vgg import VGG16_Weights
 
 device = torch.device("cpu")
 
+def mySoftMax(x):
+    # return torch.exp(x) / torch.sum(torch.exp(x), dim=1).view(-1, 1)
+    sum = torch.sum(x, dim=1).view(-1, 1).repeat(1, 2)
+    return x / sum
+
 class StatusNN(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes=1):
         super().__init__()
@@ -40,7 +45,8 @@ class Linear_QNet(nn.Module):
         self.linear1 = nn.Linear(4*4 * 64, 64, device=device)
         self.linear2 = nn.Linear(64, output_size, device=device)
         # soft max layer
-        self.softmax = nn.Softmax(dim=0)
+        # self.softmax = nn.Softmax(dim=0)
+        self.softmax = mySoftMax
 
     def forward(self, x):
         x = self.conv1(x)
@@ -51,7 +57,8 @@ class Linear_QNet(nn.Module):
         x = self.pool(x)
         x = self.conv4(x)
         x = self.pool(x)
-        x = torch.flatten(x, 0)
+        # x = torch.flatten(x, 1)
+        x = x.view(-1, 4*4*64)
         x = self.linear1(torch.squeeze(x, 0))
         x = self.linear2(torch.squeeze(x, 0))
         # x = self.softmax(x)
@@ -90,8 +97,10 @@ class VGG(nn.Module):
         return x
 
 
-BATCH_SIZE = 2000
+BATCH_SIZE = 100
 TESTSIZE = 2000
+
+EPOCHSBETWEENPLOTS = 10
 
 # [data, target] = getTestData(64, True)
 # model = StatusNN(3 * 96 * 96, 512) # 27648
@@ -109,29 +118,25 @@ accuracyPlot = []
 lastMeanAccuracy = 0
 meanAccuracyPlot = []
 predictionRatioPlot = []
+lossPlot = []
 bestAccuracy = 0
 
 for epoch in range(10000):
     model.train()
     
     [data, target] = getTestDataVector(BATCH_SIZE, True)
-    meanLoss = 0
-    for i in range(BATCH_SIZE):
-        optimizer.zero_grad()
-        # print("Epoch: ", epoch)
-        # img = transforms.ToPILImage()(data[i])
-        # img = transforms.ToTensor()(img)
-        output = model(data[i])
-        loss = criterion(output, target[i])
-        
-        # print("Loss: ", loss.item())
-        meanLoss += loss.item()
-        
-        # backward pass
-        loss.backward()
-        optimizer.step()
-    meanLoss /= BATCH_SIZE
-    print("Mean Loss: ", meanLoss)
+
+    optimizer.zero_grad()
+    output = model(data)
+    # print("output: ", output)
+
+    loss = criterion(output, target)
+    print("Loss: ", loss.item())
+    lossPlot.append(loss.item())
+    loss.backward()
+    optimizer.step()
+
+    # print("Mean Loss: ", meanLoss)
 
     model.eval()
 
@@ -146,23 +151,29 @@ for epoch in range(10000):
     with torch.no_grad():
         print("Epoch: ", epoch)
         accuracy= 0
-        [data, target] = getEvaluationData(TESTSIZE)
+        # none = all data
         # [data, target] = getEvaluationData(None)
+        [data, target] = getEvaluationData(1000)
 
-        for i in range(TESTSIZE):
-            output = model(data[i])
-            output = torch.sigmoid(output)
-            output = (output > 0.5).float()
-            if output[0] == 1:
-                predictionRatio = predictionRatio + 1
-            accuracy = accuracy + (output == target[i]).float().mean()
-        accuracy = accuracy / TESTSIZE
+        output = model(data)
+        # output = mySoftMax(output)
+        # one hot encoding argmax
+        output = torch.nn.functional.one_hot(torch.argmax(output, dim=1), num_classes=2).float()
+        # print("output: ", output)
+        # output = (output > 0.5).float()
+        accuracy = (output == target).float().mean()
+
+        predictionRatio = output[:, 0].mean()
+
+        print("predictionRatio: ", predictionRatio)
+
+        # accuracy = accuracy / TESTSIZE
         accuracy = accuracy.item()
         # print("Accuracy: ", accuracy)
         accuracyPlot.append(accuracy)
         # tenLastAccuracy = accuracyPlot[-10:]
         # meanAccuracyPlot.append(sum(accuracyPlot[-100:]) / len(accuracyPlot[-100:]))
-        predictionRatio = predictionRatio / TESTSIZE
+        # predictionRatio = predictionRatio / TESTSIZE
         predictionRatioPlot.append(predictionRatio)
         plot(accuracyPlot, predictionRatioPlot)
 
