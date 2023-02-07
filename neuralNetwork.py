@@ -19,21 +19,25 @@ from torch import Tensor
 
 
 
-batch_size = 100
+BATCH_SIZE = 100
+TEST_SIZE = 32700
+TRAIN_SIZE = 10000
 number_of_labels = 2
-test_size = 3000
-train_size = 10000
 
 # Create an instance for training. 
-train_set_data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=batch_size, shuffle=True)
-train_set_labels = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=batch_size, shuffle=True)
+train_set_data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=BATCH_SIZE, shuffle=True)
+train_set_labels = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=BATCH_SIZE, shuffle=True)
 
 # Create an instance for testing, shuffle is set to False.
-test_set_data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=batch_size, shuffle=False)
-test_set_labels = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=batch_size, shuffle=False)
+test_set_data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=BATCH_SIZE, shuffle=False)
+test_set_labels = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=BATCH_SIZE, shuffle=False)
 
-print("The number of images in a training set is: ", len(train_set_data.dataset['x']))
-print("The number of images in a test set is: ", len(test_set_data.dataset['x']))
+print("The number of images in the training set is: ", len(train_set_data.dataset['x']))
+print("The number of images in the test set is: ", len(test_set_data.dataset['x']))
+
+print("Training size is: ", TRAIN_SIZE)
+print("Test size is: ", TEST_SIZE)
+print("Batch size is: ", BATCH_SIZE)
 
 
 classes = ('cancer', 'no cancer')
@@ -173,14 +177,14 @@ def testAccuracy():
         predictedFalse = 0
         test_counter = 0
         inverted_counter = 0
-        for j in range(0, test_size, batch_size):
+        for j in range(0, TEST_SIZE, BATCH_SIZE):
             
-            images = test_set_data.dataset['x'][j:j+batch_size]
-            labels = test_set_labels.dataset['y'][j:j+batch_size]
+            images = test_set_data.dataset['x'][j:j+BATCH_SIZE]
+            labels = test_set_labels.dataset['y'][j:j+BATCH_SIZE]
             #add row to labels that inverts the labels
             labels = np.column_stack((labels, np.logical_not(labels)))
             # reshape the labels to be a 2x10 matrix
-            labels = labels.reshape(batch_size, 2)
+            labels = labels.reshape(BATCH_SIZE, 2)
 
             #convert images to tensor
             images = Variable(torch.tensor(images, dtype=torch.float32).to(device))
@@ -190,11 +194,16 @@ def testAccuracy():
             
             # run the model on the test set to predict labels
             outputs = model(images)
-
             # one-hot encode the outputs
             outputs = torch.nn.functional.one_hot(torch.argmax(outputs, dim=1), num_classes=2).to(device)
             
+            #sum the elements of the first column
+            predictedTrue = torch.sum(outputs[:,0])
+            predictedFalse = torch.sum(outputs[:,1])
             
+
+
+
             # print(outputsMask)
             
 
@@ -202,16 +211,17 @@ def testAccuracy():
             # print("test phase labels: ", labels)
             # Tensor.cpu(outputs)
             
-            values, counts = torch.unique(outputs[outputs == labels], return_counts=True)
+            _, counts = torch.unique(outputs[outputs == labels], return_counts=True)
             # Tensor.cpu(counts)
-            # # print(values)
+            # print(outputs[outputs == labels])
             # print(counts)
-            # extract item from tensor to int
-            # inverted_counter += len(outputs) - counts[0].item()
-            correctImages += counts[0].item()
-            
+            if len(counts) > 0:
+                correctImages += counts[0].item()
+            else:
+                correctImages += 0
+
+
             # print("correct images count: ", correctImages)
-            # print("inverted count: ", inverted_counter)
 
 
             #compare the outputs to the labels
@@ -219,34 +229,34 @@ def testAccuracy():
             # print((outputs == labels).all(dim=1).nonzero().size(0))
 
             # add to test_counter with batch size
-            test_counter += batch_size
+            test_counter += BATCH_SIZE
 
-            # argmax to outputs
-            # outputs = torch.argmax(outputs, dim=1)
+            
+                
+            
+                
+            
+                
+            
+            printProgressBar(test_counter, TEST_SIZE, prefix = ' Testing:', suffix = 'Complete', length = 10)
+
+            
+            
+        #print prediction bias in the shape [---*---] where * is the bias
+        print('Prediction bias: False [', end='')
+        for i in range(int(predictedTrue/(predictedTrue+predictedFalse)*10)):
+            print('-', end='')
+        print('*', end='')
+        for i in range(int(predictedFalse/(predictedTrue+predictedFalse)*10)):
+            print('-', end='')
+        print('] True')
+
         
-            # print("Labels print:", labels)
-            # print("Outputs print:", outputs)
-            # print("Label first row", labels[0])
-            # print("Label first row", labels[0][0])
-            # print("Output first row", outputs[0])        
-            # print("all labels:",labels)
-            # if same number of predicted and labels, then add to accuracy
-            # for i in range(len(outputs)):
-            #     # print outputs rows
-                
-            
-                
-            
-                
-            
-            printProgressBar(test_counter, test_size, prefix = ' Testing:', suffix = 'Complete', length = 10)
 
-            
-            
-       
+
         # compute the accuracy over all test images
-        accuracy = correctImages / test_size 
-    print(correctImages, 'correct images out of', test_size, 'images. Accuracy %.2f %%' % (correctImages/test_size*100))
+        accuracy = correctImages / TEST_SIZE 
+    print(correctImages, 'correct images out of', TEST_SIZE, 'images. Accuracy %.2f %%' % (correctImages/TEST_SIZE*100))
     # print('Epoch predicted True:', predictedTrue, ', False:', predictedFalse)
     # compute the accuracy over all test images
     return(accuracy)
@@ -268,15 +278,15 @@ def train(num_epochs):
         running_acc = 0.0
         batchCounter = 0
         
-        for i in range(0, train_size, batch_size):
+        for i in range(0, TRAIN_SIZE, BATCH_SIZE):
             i = random.randint(0, 260000)
             # get the inputs
-            images = train_set_data.dataset['x'][i:i+batch_size]
-            labels = train_set_labels.dataset['y'][i:i+batch_size]
+            images = train_set_data.dataset['x'][i:i+BATCH_SIZE]
+            labels = train_set_labels.dataset['y'][i:i+BATCH_SIZE]
             #add row to labels that inverts the labels
             labels = np.column_stack((labels, np.logical_not(labels)))
             # reshape the labels to be a 2x10 matrix
-            labels = labels.reshape(batch_size, 2)
+            labels = labels.reshape(BATCH_SIZE, 2)
            
             # convert to torch tensors with the float32 data type
             images = Variable(torch.tensor(images, dtype=torch.float32).to(device))
@@ -301,13 +311,13 @@ def train(num_epochs):
             # running_acc += (torch.flatten(outputs).round() == torch.flatten(labels)).sum().item()
             
             batchCounter = batchCounter + 1
-            # print(" Epoch", epoch+1, '(', round( (batchCounter*batch_size)/size*100), '%)', end='\r') 
-            printProgressBar(batchCounter*batch_size, train_size, prefix = ' Training:', suffix = 'Complete', length = 50)           
+            # print(" Epoch", epoch+1, '(', round( (batchCounter*BATCH_SIZE)/size*100), '%)', end='\r') 
+            printProgressBar(batchCounter*BATCH_SIZE, TRAIN_SIZE, prefix = ' Training:', suffix = 'Complete', length = 50)           
             
-            # if batchCounter/batch_size % 1000 == 0:  
+            # if batchCounter/BATCH_SIZE % 1000 == 0:  
             #     # print every 1000  
             #     print('Epoch [%d/%d], Interval [%d/%d], Loss: %.4f'
-            #         %(epoch+1, num_epochs, i+1, i+batch_size, running_loss / 1000))
+            #         %(epoch+1, num_epochs, i+1, i+BATCH_SIZE, running_loss / 1000))
 
             #     # zero the loss
             #     running_loss = 0.0
@@ -323,6 +333,9 @@ def train(num_epochs):
             best_accuracy = accuracy
         accuracyPlot.append(accuracy)
         plot(accuracyPlot, None)
+        #print loss
+        print('Loss: %.4f' %( running_loss / TRAIN_SIZE))
+        
         print()
         # print('training accuracy is %d %%' % (running_acc))
         
@@ -350,8 +363,8 @@ def show(inp, label):
 # Function to test the model with a batch of images and show the labels predictions
 def testBatch():
     # get batch of images from the test_set
-    images = test_set_data.dataset['x'][0:batch_size]
-    labels = test_set_labels.dataset['y'][0:batch_size]
+    images = test_set_data.dataset['x'][0:BATCH_SIZE]
+    labels = test_set_labels.dataset['y'][0:BATCH_SIZE]
 
     #convert entries to images
 
@@ -369,14 +382,14 @@ def testBatch():
     
     # show all images as one image grid
     grid = torchvision.utils.make_grid(images, nrow=25)
-    show(grid, label='GroundTruth: ' + ' '.join('%5s' % classes[labels[j]] for j in range(batch_size)))
+    show(grid, label='GroundTruth: ' + ' '.join('%5s' % classes[labels[j]] for j in range(BATCH_SIZE)))
     
     #save images
     torchvision.utils.save_image(grid, 'test.png')
 
 if __name__ == "__main__":
     # Build model
-    train(50)
+    train(200)
     print('Finished Training')
 
     # Test which classes performed well
