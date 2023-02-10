@@ -9,7 +9,7 @@ doc_ref.set({ u'first': u'Hello' })
 
 def logNetwork (
     timestamps: list[float],
-    accuracyTraining: list[float],
+    accuracyTrain: list[float],
     accuracyTest: list[float],
     loss: list[float],
     batchSize: int,
@@ -23,7 +23,7 @@ def logNetwork (
   doc_ref = db.collection(u'networks').document(name)
   doc_ref.set({
     u'timestamps': timestamps,
-    u'accuracyTraining': accuracyTraining,
+    u'accuracyTrain': accuracyTrain,
     u'accuracyTest': accuracyTest,
     u'loss': loss,
     u'batchSize': batchSize,
