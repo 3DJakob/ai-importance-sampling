@@ -7,7 +7,19 @@ doc_ref = db.collection(u'test').document(u'hello')
 doc_ref.set({ u'first': u'Hello' })
 
 
-def logNetwork (timestamps: list, accuracyTraining, accuracyTest, loss, batchSize, testSize, name, lr, optimizer, lossFunction, model):
+def logNetwork (
+    timestamps: list[float],
+    accuracyTraining: list[float],
+    accuracyTest: list[float],
+    loss: list[float],
+    batchSize: int,
+    testSize: int,
+    name: str,
+    lr: float,
+    optimizer: str,
+    lossFunction: str,
+    model: str
+  ) -> None:
   doc_ref = db.collection(u'networks').document(name)
   doc_ref.set({
     u'timestamps': timestamps,
