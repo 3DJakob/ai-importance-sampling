@@ -21,7 +21,7 @@ from torchsummary import summary
 from torch import optim
 from tqdm.notebook import trange, tqdm
 import seaborn as sns; sns.set(style='whitegrid')
-
+from api import logRun, logNetwork
 
 # %matplotlib inline
 
@@ -188,16 +188,16 @@ val_ts.transform=val_transf
 
 # The subset can also have transform attribute (if we asign)
 train_ts.transform
-
+batch_size = 64
 
 # Training DataLoader
 train_dl = DataLoader(train_ts,
-                      batch_size=64, 
+                      batch_size=batch_size, 
                       shuffle=True)
 
 # Validation DataLoader
 val_dl = DataLoader(val_ts,
-                    batch_size=64,
+                    batch_size=batch_size,
                     shuffle=False)
 
 # check samples
@@ -428,6 +428,23 @@ def train_val(model, params):
   correlation_history={"train": [],"val": []} # histroy of correlation values in each epoch
   best_model_wts = copy.deepcopy(model.state_dict()) # a deep copy of weights for the best performing model
   best_loss=float('inf') # initialize best loss to a large value
+
+  timestamps = []
+  accuracyTrain = metric_history["train"]
+  accuracyTest = metric_history["val"]
+  lossTrain = loss_history["train"]
+  lossTest = loss_history["val"]
+
+  logNetwork(
+      batch_size,
+      len_val,
+      'DCNN',
+      get_lr(opt),
+      'Adam',
+      'NLLLoss',
+      'foobar',
+  )
+
   
   ''' Train Model n_epochs '''
   
@@ -436,6 +453,18 @@ def train_val(model, params):
     ''' Get the Learning Rate '''
     current_lr=get_lr(opt)
     print('Epoch {}/{}, current lr={}'.format(epoch+1, epochs, current_lr), "\r")
+
+    if epoch % 10 == 0:
+        logRun(
+            timestamps,
+            accuracyTrain,
+            accuracyTest,
+            lossTrain,
+            lossTest,
+            'DCNN',
+            5,
+            'Random Sampling',
+          )
 
     
     '''
@@ -482,9 +511,9 @@ def train_val(model, params):
     # print("-"*10) 
     # printProgressBar(epoch, 50, prefix = 'Progress:', suffix = 'Complete', length = 50)
     print()
-  # load best model weights
-  model.load_state_dict(best_model_wts)
-      
+    # load best model weights
+    model.load_state_dict(best_model_wts)
+
   return model, loss_history, metric_history, correlation_history
 
 
