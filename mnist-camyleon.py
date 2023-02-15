@@ -118,10 +118,12 @@ class Net(nn.Module):
     
     def getNextTrainDataIndexesUsingImportanceSampling(self, trainDataIndexes, loss):
       network.eval()
-      # pick new random indesxes of size BATCH_SIZE in range of trainData
-      newIndexes = random.sample([x for x in range(0, trainData.shape[0]) if x not in trainDataIndexes], batch_size_train)
-      newIndexes.sort()
+      # pool of possible new index candidates no duplicates and no already selected indexes
+      pool = [x for x in range(0, trainData.shape[0]) if x not in trainDataIndexes]
 
+      # Pick trainDataIndexes.size() random indexes from pool
+      newIndexes = random.sample(pool, len(trainDataIndexes))
+      newIndexes.sort()
       # check losses for new indexes
       data, target = self.getBatch(newIndexes)
       output = network(data)
@@ -132,6 +134,9 @@ class Net(nn.Module):
         if lossNew[i] < loss[i]:
           newIndexes[i] = trainDataIndexes[i]
 
+      # hasDuplicates = len(newIndexes) != len(set(newIndexes))
+      # if hasDuplicates:
+      #   print('Duplicates found!!')
       newIndexes.sort()
       network.train()
       return newIndexes
@@ -189,12 +194,12 @@ class Net(nn.Module):
         loss = F.cross_entropy(output, target, reduction='none')
         
         # batch importance sampling
-        trainDataIndexes = self.getNextTrainDataIndexesUsingImportanceSampling2(trainDataIndexes, loss)
+        trainDataIndexes = self.getNextTrainDataIndexesUsingImportanceSampling(trainDataIndexes, loss)
         # in order sampling
         # trainDataIndexes = range(i * batch_size_train, (i + 1) * batch_size_train)
         # random sampling
         # trainDataIndexes = random.sample([x for x in range(0, trainData.shape[0])], batch_size_train)
-        trainDataIndexes.sort()
+        # trainDataIndexes.sort()
 
         loss = torch.mean(loss)
         loss.backward()
