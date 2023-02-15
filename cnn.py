@@ -19,7 +19,6 @@ from torchvision import utils
 from torch.utils.data import DataLoader
 from torchsummary import summary
 from torch import optim
-
 from tqdm.notebook import trange, tqdm
 import seaborn as sns; sns.set(style='whitegrid')
 
@@ -82,7 +81,9 @@ class pytorch_data(Dataset):
         idx_choose = np.random.choice(np.arange(len(file_names)), 
                                       4000,
                                       replace=False).tolist()
-        file_names_sample = [file_names[x] for x in idx_choose]
+        # choose 4000 images in order
+        # idx_choose = np.arange(4000)
+        file_names_sample = [file_names[i] for i in idx_choose] # get the file names
         self.full_filenames = [os.path.join(cdm_data, f) for f in file_names_sample]   # get the full path to images
         
         # Get Labels
@@ -314,6 +315,15 @@ def printProgressBar (iteration, total, length, prefix = '', suffix = '', decima
   if iteration >= total: 
       print()
 
+# L2 norm of the gradient of a batch of losses with respect to the parameters of the network
+def gradient_norm(loss, model):
+    grad_norm = 0
+    for p in model.parameters():
+        if p.grad is not None:
+            grad_norm += p.grad.data.norm(2).item() ** 2
+    grad_norm = grad_norm ** (1. / 2)
+    return grad_norm
+
 # Function to get the learning rate
 def get_lr(opt):
     for param_group in opt.param_groups:
@@ -324,14 +334,18 @@ def loss_batch(loss_func, output, target, opt=None):
     
     loss = loss_func(output, target) # get loss
     pred = output.argmax(dim=1, keepdim=True) # Get Output Class
-    metric_b=pred.eq(target.view_as(pred)).sum().item() # get performance metric
+    metric_b = pred.eq(target.view_as(pred)).sum().item() # get performance metric
+    loss_each = loss.item()/len(target) # get loss per sample
+    grad_norm = 0
     
     if opt is not None:
         opt.zero_grad()
         loss.backward()
         opt.step()
-
-    return loss.item(), metric_b
+        # compute gradient norm
+        grad_norm = gradient_norm(loss, model)
+        
+    return loss.item(), metric_b, grad_norm, loss_each
 
 # Compute the loss value & performance metric for the entire dataset (epoch)
 def loss_epoch(model,loss_func,dataset_dl,opt=None):
@@ -340,38 +354,54 @@ def loss_epoch(model,loss_func,dataset_dl,opt=None):
     t_metric=0.0
     len_data=len(dataset_dl.dataset)
     counter=0
+    batch_stats = []
+    correlation = []
     # print(len_data, " samples in dataset")
     # internal loop over dataset
     for xb, yb in dataset_dl:
-        counter += 1
+        
         # move batch to device
-        xb=xb.to(device)
-        yb=yb.to(device)
-        output=model(xb) # get model output
-        loss_b,metric_b=loss_batch(loss_func, output, yb, opt) # get loss per batch
-        run_loss+=loss_b        # update running loss
+        # xb is batch of images ([64, 3, 96, 96])
+        # yb is batch of labels ([64])
+        xb = xb.to(device)
+        yb = yb.to(device)
+        output = model(xb) # get model output ([64, 2])
+        loss_b, metric_b, grad_n, loss_each = loss_batch(loss_func, output, yb, opt) # get loss per batch and gradient norm
+        run_loss += loss_b        # update running loss
+        
+        #add grad_n and loss_each to batch_stats
+        batch_stats.append([loss_each, grad_n])
+        
+        
 
-        printProgressBar(counter, len(dataset_dl), length=25)
+        counter += 1
+        printProgressBar(counter, len(dataset_dl), length=50)
         if metric_b is not None: # update running metric
-            t_metric+=metric_b    
+            t_metric+=metric_b   
+    
+    # Correlation 
+    correlation = np.corrcoef(batch_stats, rowvar=False)[0,1]
+    # print(correlation)
+
+    
+        
     
     loss=run_loss/float(len_data)  # average loss value
     metric=t_metric/float(len_data) # average metric value
     
-    return loss, metric
+    return loss, metric, correlation
 
 params_train={
   "train": train_dl,
   "val": val_dl,
   "epochs": 50,
-  "optimiser": optim.Adam(cnn_model.parameters(),
-                          lr=0.0003),
+  "optimiser": optim.SGD(cnn_model.parameters(), lr = 0.01, momentum=0.9),
   "lr_change": ReduceLROnPlateau(opt,
                                 mode='min',
                                 factor=0.5,
                                 patience=20,
                                 verbose=0),
-  "f_loss": nn.NLLLoss(reduction="sum"),
+  "f_loss": nn.NLLLoss(reduction="none"), #sum??
   "weight_path": "weights.pt",
   "check": False, 
 }
@@ -382,6 +412,7 @@ def train_val(model, params):
   * The best performing model on the validation dataset
   * The Loss per iteration
   * The Evaluation Metric per iteration (accuracy)
+  * The Correlation between the loss and the gradient norm
   '''
   # Get the parameters
   epochs=params["epochs"]
@@ -394,6 +425,7 @@ def train_val(model, params):
   
   loss_history={"train": [],"val": []} # history of loss values in each epoch
   metric_history={"train": [],"val": []} # histroy of metric values in each epoch
+  correlation_history={"train": [],"val": []} # histroy of correlation values in each epoch
   best_model_wts = copy.deepcopy(model.state_dict()) # a deep copy of weights for the best performing model
   best_loss=float('inf') # initialize best loss to a large value
   
@@ -411,10 +443,11 @@ def train_val(model, params):
     '''
     model.train()
     print("Training Model")
-    train_loss, train_metric = loss_epoch(model,loss_func,train_dl,opt)
+    train_loss, train_metric, train_correlation = loss_epoch(model,loss_func,train_dl,opt)
 
     loss_history["train"].append(train_loss)
     metric_history["train"].append(train_metric)
+    correlation_history["train"].append(train_correlation)
     
     
     '''
@@ -423,7 +456,7 @@ def train_val(model, params):
     model.eval()
     print("Evaluate Model")
     with torch.no_grad():
-        val_loss, val_metric = loss_epoch(model,loss_func,val_dl)
+        val_loss, val_metric, val_correlation = loss_epoch(model,loss_func,val_dl)
     
     # store best model
     if(val_loss < best_loss):
@@ -452,7 +485,7 @@ def train_val(model, params):
   # load best model weights
   model.load_state_dict(best_model_wts)
       
-  return model, loss_history, metric_history
+  return model, loss_history, metric_history, correlation_history
 
 
 params_train={
@@ -470,17 +503,20 @@ params_train={
 
 ''' Actual Train / Evaluation of CNN Model '''
 
-cnn_model,loss_hist,metric_hist=train_val(cnn_model,params_train)
+cnn_model, loss_hist, metric_hist, correlation_hist = train_val(cnn_model, params_train)
 print("Training Complete!")
 
 epochs=params_train["epochs"]
 
-fig,ax = plt.subplots(1,2,figsize=(12,5))
-
+fig,ax = plt.subplots(1,3,figsize=(12,5), constrained_layout=True)
 sns.lineplot(x=[*range(1,epochs+1)],y=loss_hist["train"],ax=ax[0],label='Training Loss')
 sns.lineplot(x=[*range(1,epochs+1)],y=loss_hist["val"],ax=ax[0],label='Validation Loss')
+ax[0].set_title('Loss')
 sns.lineplot(x=[*range(1,epochs+1)],y=metric_hist["train"],ax=ax[1],label='Training Accuracy')
 sns.lineplot(x=[*range(1,epochs+1)],y=metric_hist["val"],ax=ax[1],label='Validation Accuracy')
-plt.title('Convergence History')
+ax[1].set_title('Accuracy')
+sns.lineplot(x=[*range(1,epochs+1)],y=correlation_hist["train"],ax=ax[2],label='Training Correlation')
+ax[2].set_title('Correlation')
+plt.suptitle('Statistics of Training and Validation')
 plt.pause(10)
 
