@@ -2,6 +2,8 @@ import torch
 import h5py
 import matplotlib.pyplot as plt
 from IPython import display
+import torchvision.datasets as dsets
+
 device = torch.device('cpu')
 
 groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
@@ -99,6 +101,52 @@ def getTestData(size, randomize = True):
         data[i] = tensorData
         target[i] = hasCancer(dataIndex)
 
+def getTestMnistData(size):
+    # load MNIST dataset
+    trainset = dsets.MNIST(root='./data', train=True, download=True, transform=None)
+    images = trainset.data
+    targets = trainset.targets
+
+    # convert targets to one-hot
+    labels = torch.zeros(targets.shape[0], 10)
+    labels[torch.arange(targets.shape[0]), targets] = 1
+    targets = labels
+
+    # pick size random images
+    data = torch.zeros(size, 1, 28, 28).to(device) # 64 samples, 28x28 image
+    target = torch.zeros(size, 10).to(device) # 64 samples, 10 different classes
+
+    for i in range(0, size):
+        dataIndex = torch.randint(0, images.shape[0], (1,)).item()
+        data[i] = images[dataIndex]
+        target[i] = targets[dataIndex]
+
+    target = torch.nn.functional.one_hot(torch.argmax(target, dim=1), num_classes=10).float()
+    return [data, target]
+
+def getEvaluationMnistData(size):
+    # load MNIST test dataset
+    testset = dsets.MNIST(root='./data', train=False, download=True, transform=None)
+    images = testset.data
+    targets = testset.targets
+
+    # convert targets to one-hot
+    labels = torch.zeros(targets.shape[0], 10)
+    labels[torch.arange(targets.shape[0]), targets] = 1
+    targets = labels
+    targets = targets[0:size]
+    # to tensor
+    targets = torch.tensor(targets, dtype=torch.float)
+
+
+    data = images[0:size]
+    # transorm to sizex28x28 to sizex1x28x28
+    data = data.unsqueeze(1)
+    data = torch.tensor(data, dtype=torch.float)
+    # pick first size images
+    # target = torch.nn.functional.one_hot(torch.argmax(target, dim=1), num_classes=10).float()
+    return [data, targets]
+
 
 def getTestDataVector(size, randomize = True):       
     data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=32, shuffle=True)
@@ -114,7 +162,7 @@ def getTestDataVector(size, randomize = True):
         # print('randomize', randomize)
         if randomize == True:
             datasize = images.shape[0]
-            dataIndex = torch.randint(1000, datasize, (1,)).item()
+            dataIndex = torch.randint(0, datasize, (1,)).item()
         # print(dataIndex, 'dataIndex')
         img = images[dataIndex]
         tensorData = torch.tensor(img, dtype=torch.float)

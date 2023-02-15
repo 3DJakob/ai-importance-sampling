@@ -15,8 +15,9 @@ log_interval = 10
 random_seed = 1
 torch.backends.cudnn.enabled = False
 torch.manual_seed(random_seed)
+import h5py
 
-train_loader = torch.utils.data.DataLoader(
+train_loader_mnist = torch.utils.data.DataLoader(
   torchvision.datasets.MNIST(root='./data', train=True, download=True,
                              transform=torchvision.transforms.Compose([
                                torchvision.transforms.ToTensor(),
@@ -25,7 +26,7 @@ train_loader = torch.utils.data.DataLoader(
                              ])),
   batch_size=batch_size_train, shuffle=True)
 
-test_loader = torch.utils.data.DataLoader(
+test_loader_mnist = torch.utils.data.DataLoader(
   torchvision.datasets.MNIST(root='./data', train=False, download=True,
                              transform=torchvision.transforms.Compose([
                                torchvision.transforms.ToTensor(),
@@ -33,6 +34,26 @@ test_loader = torch.utils.data.DataLoader(
                               #    (0.1307,), (0.3081,))
                              ])),
   batch_size=batch_size_test, shuffle=True)
+
+train_loader = train_loader_mnist
+test_loader = test_loader_mnist
+
+# check if has .data or ['x']
+trainData = None
+if (hasattr(train_loader.dataset, 'data')):
+  trainData = train_loader.dataset.data
+else:
+  trainData = train_loader.dataset['x']
+
+if trainData is None:
+  raise Exception('Could not find train data')
+
+CHANNELS = 1
+HEIGHT = trainData.shape[1]
+WIDTH = trainData.shape[2]
+
+if (len(trainData.shape) > 3):
+  CHANNELS = trainData.shape[3]
 
 examples = enumerate(test_loader)
 batch_idx, (example_data, example_targets) = next(examples)
@@ -43,17 +64,29 @@ class Net(nn.Module):
         self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
         self.conv2_drop = nn.Dropout2d()
-        self.fc1 = nn.Linear(320, 50)
+        self.linearSize = self.getLinearSize()
+        self.fc1 = nn.Linear(self.linearSize, 50)
         self.fc2 = nn.Linear(50, 10)
+        
+    def getLinearSize (self):
+      testMat = torch.zeros(1, CHANNELS, HEIGHT, WIDTH)
+      testMat = self.convForward(testMat)
+      testMat = testMat.flatten()
+      size = testMat.size().numel()
+      return size
+
+    def convForward(self, x) -> torch.Tensor:
+      x = F.relu(F.max_pool2d(self.conv1(x), 2))
+      x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
+      return x
 
     def forward(self, x):
-        x = F.relu(F.max_pool2d(self.conv1(x), 2))
-        x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
-        x = x.view(-1, 320)
+        x = self.convForward(x)
+        x = x.view(-1, self.linearSize)
         x = F.relu(self.fc1(x))
         x = F.dropout(x, training=self.training)
         x = self.fc2(x)
-        return F.log_softmax(x)
+        return F.log_softmax(x, dim=1)
 
     def trainEpoch(self, epoch):
       network.train()
@@ -84,7 +117,8 @@ class Net(nn.Module):
       with torch.no_grad():
         for data, target in test_loader:
           output = network(data)
-          test_loss += F.nll_loss(output, target, size_average=False).item()
+          print(output.shape)
+          test_loss += F.nll_loss(output, target, reduction='sum').item()
           pred = output.data.max(1, keepdim=True)[1]
           correct += pred.eq(target.data.view_as(pred)).sum()
       test_loss /= len(test_loader.dataset)

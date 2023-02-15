@@ -6,6 +6,9 @@ import torch.nn.functional as F
 import torch.optim as optim
 import math
 import numpy as np
+import time
+import random
+from api import logNetwork, logRun
 
 n_epochs = 10
 batch_size_train = 64
@@ -26,12 +29,12 @@ train_loader_mnist = torch.utils.data.DataLoader(
                               #  torchvision.transforms.Normalize(
                               #    (0.1307,), (0.3081,))
                              ])),
-  batch_size=batch_size_train, shuffle=True)
+  batch_size=batch_size_train, shuffle=False)
 
-train_loader_pcam = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=batch_size_train, shuffle=True)
-train_loader_pcam_groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
+train_loader_pcam = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=batch_size_train, shuffle=False)
+train_loader_pcam_groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=False)
 
-test_loader_pcam_groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=32, shuffle=True)
+test_loader_pcam_groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=32, shuffle=False)
 
 test_loader_mnist = torch.utils.data.DataLoader(
   torchvision.datasets.MNIST(root='./data', train=False, download=True,
@@ -40,9 +43,9 @@ test_loader_mnist = torch.utils.data.DataLoader(
                               #  torchvision.transforms.Normalize(
                               #    (0.1307,), (0.3081,))
                              ])),
-  batch_size=batch_size_test, shuffle=True)
+  batch_size=batch_size_test, shuffle=False)
 
-test_loader_pcam = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=batch_size_test, shuffle=True)
+test_loader_pcam = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=batch_size_test, shuffle=False)
 # Change active dataset here
 train_loader = train_loader_pcam
 # test_loader = test_loader_pcam
@@ -61,7 +64,7 @@ if trainData is None:
 
 
 testData = test_loader_pcam.dataset['x']
-
+testDataSize = testData.shape[0]
 
 CHANNELS = 1
 HEIGHT = trainData.shape[1]
@@ -103,30 +106,97 @@ class Net(nn.Module):
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
 
+    # return data and target
+    def getBatch(self, trainDataIndexes: list):
+      data = torch.zeros(batch_size_train, HEIGHT, WIDTH, CHANNELS)
+      target = torch.zeros(batch_size_train, 1, dtype=torch.long)
+      data = torch.tensor(trainData[trainDataIndexes], dtype=torch.float)
+      target = torch.tensor(train_loader_pcam_groundTruth.dataset['y'][trainDataIndexes], dtype=torch.long)
+      data = data.reshape(data.shape[0], data.shape[3], data.shape[1], data.shape[2])
+      target = target.reshape(target.shape[0])
+      return data, target
+    
+    def getNextTrainDataIndexesUsingImportanceSampling(self, trainDataIndexes, loss):
+      network.eval()
+      # pick new random indesxes of size BATCH_SIZE in range of trainData
+      newIndexes = random.sample([x for x in range(0, trainData.shape[0]) if x not in trainDataIndexes], batch_size_train)
+      newIndexes.sort()
+
+      # check losses for new indexes
+      data, target = self.getBatch(newIndexes)
+      output = network(data)
+      lossNew = F.cross_entropy(output, target, reduction='none')
+
+      # Keep indexes from trainDataIndexes where lossNew > loss
+      for i in range(0, len(trainDataIndexes)):
+        if lossNew[i] < loss[i]:
+          newIndexes[i] = trainDataIndexes[i]
+
+      newIndexes.sort()
+      network.train()
+      return newIndexes
+
+    def getNextTrainDataIndexesUsingImportanceSampling2(self, trainDataIndexes, loss):
+      network.eval()
+
+      for i in range(0, batch_size_train):
+        # pick random index in range of trainData
+        randomIndex = random.randint(0, trainData.shape[0] - 1)
+        data, target = self.getBatch([randomIndex])
+        output = network(data)
+        lossNew = F.cross_entropy(output, target, reduction='none')
+        if lossNew[0] < loss[i]:
+          trainDataIndexes[i] = randomIndex
+
+      trainDataIndexes.sort()
+      network.train()
+      return trainDataIndexes
+
+
+
     def trainEpoch(self, epoch):
+      start = time.time()
       network.train()
       dataSize = trainData.shape[0]
       iterations = math.floor(dataSize / batch_size_train)
       print('Iterations: ' + str(iterations))
+
+      # create index list 1 to batchSize
+      trainDataIndexes = list(range(0, batch_size_train))
+
+      timestamps = []
+      accuracyTrain = []
+      accuracyTest = []
+      lossTrain = []
+      lossTest = []
+
+      logNetwork(
+        batch_size_train,
+        testDataSize,
+        'mnist - camyleon',
+        learning_rate,
+        'adam',
+        'cross entropy',
+        'foobar',
+      )
+
       for i in range(0, iterations):
-        data = trainData[i * batch_size_train: (i + 1) * batch_size_train]
-        # reshape data from 96, 96, 3 to 3, 96, 96
-        data = data.reshape(data.shape[0], data.shape[3], data.shape[1], data.shape[2])
-        data = torch.tensor(data, dtype=torch.float)
-        target = train_loader_pcam_groundTruth.dataset['y'][i * batch_size_train: (i + 1) * batch_size_train]
-
-        target = target.reshape(target.shape[0])
-        target = torch.tensor(target, dtype=torch.long)
-
-        # target2 = torch.zeros(target.shape[0], 2)
-        # for i in range(0, target.shape[0]):
-        #   target2[i][target[i]] = 1
-        # target = target2
-
-      # for batch_idx, (data, target) in enumerate(train_loader):
+        # get data and target from getBatch
+        data, target = self.getBatch(trainDataIndexes)
+        # for batch_idx, (data, target) in enumerate(train_loader):
         optimizer.zero_grad()
         output = network(data)
-        loss = F.cross_entropy(output, target)
+        loss = F.cross_entropy(output, target, reduction='none')
+        
+        # batch importance sampling
+        trainDataIndexes = self.getNextTrainDataIndexesUsingImportanceSampling2(trainDataIndexes, loss)
+        # in order sampling
+        # trainDataIndexes = range(i * batch_size_train, (i + 1) * batch_size_train)
+        # random sampling
+        # trainDataIndexes = random.sample([x for x in range(0, trainData.shape[0])], batch_size_train)
+        trainDataIndexes.sort()
+
+        loss = torch.mean(loss)
         loss.backward()
         optimizer.step()
 
@@ -137,12 +207,47 @@ class Net(nn.Module):
 
         # print(correctlyClassified / output.shape[0])
         # print("Loss: " + str(loss.item()))
+
+        end = time.time()
+        print("Time " + str(end - start))
+        timestamps.append(end - start)
+
+        acc, loss = self.test()
+        accPlot.append(acc)
+        print(acc)
+        plot(accPlot, None)
+
+        accuracyTest.append(acc)
+        lossTest.append(loss)
         
-        if (i+1) % log_interval == 0:
-          acc = self.test()
-          accPlot.append(acc)
-          print(acc)
-          plot(accPlot, None)
+        # logRun every 20 iterations
+        if (i+1) % 20 == 0:
+          logRun(
+            timestamps,
+            accuracyTrain,
+            accuracyTest,
+            lossTrain,
+            lossTest,
+            'mnist - camyleon',
+            5,
+            'batch loss importance sampling',
+          )
+
+        start = time.time()
+      
+        # if (i+1) % log_interval == 0:
+        #   end = time.time()
+
+        #   logNetwork()
+
+        #   print("Time " + str(end - start))
+
+        #   acc = self.test()
+        #   accPlot.append(acc)
+        #   print(acc)
+        #   plot(accPlot, None)
+
+        #   start = time.time()
 
           # print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
           #   epoch, batch_idx * len(data), len(train_loader.dataset),
@@ -184,7 +289,7 @@ class Net(nn.Module):
         test_loss, correct, testSize,
         100. * correct / testSize))
       accTensor = correct / testSize
-      return accTensor.item()
+      return accTensor.item(), test_loss
 
 network = Net()
 # optimizer = optim.SGD(network.parameters(), lr=learning_rate, momentum=momentum)
