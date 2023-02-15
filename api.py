@@ -6,28 +6,38 @@ db = firestore.client()
 doc_ref = db.collection(u'test').document(u'hello')
 doc_ref.set({ u'first': u'Hello' })
 
-
-def logNetwork (
+def logRun (
     timestamps: list[float],
     accuracyTrain: list[float],
     accuracyTest: list[float],
     lossTrain: list[float],
     lossTest: list[float],
-    batchSize: int,
-    testSize: int,
-    name: str,
-    lr: float,
-    optimizer: str,
-    lossFunction: str,
-    model: str
+    networkName: str,
+    run: int,
+    runName: str,
   ) -> None:
-  doc_ref = db.collection(u'networks').document(name)
+  doc_ref = db.collection(u'networks').document(networkName).collection(u'runs').document(str(run))
   doc_ref.set({
     u'timestamps': timestamps,
     u'accuracyTrain': accuracyTrain,
     u'accuracyTest': accuracyTest,
     u'lossTrain': lossTrain,
     u'lossTest': lossTest,
+    u'name': runName,
+  }
+)
+
+def logNetwork (
+    batchSize: int,
+    testSize: int,
+    name: str,
+    lr: float,
+    optimizer: str,
+    lossFunction: str,
+    model: str,
+  ) -> None:
+  doc_ref = db.collection(u'networks').document(name)
+  doc_ref.set({
     u'batchSize': batchSize,
     u'testSize': testSize,
     u'name': name,
