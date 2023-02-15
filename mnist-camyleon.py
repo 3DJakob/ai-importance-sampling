@@ -129,11 +129,18 @@ class Net(nn.Module):
       output = network(data)
       lossNew = F.cross_entropy(output, target, reduction='none')
 
+      numberOfKeep = 0
       # Keep indexes from trainDataIndexes where lossNew > loss
       for i in range(0, len(trainDataIndexes)):
-        if lossNew[i] < loss[i]:
-          newIndexes[i] = trainDataIndexes[i]
+        decider = random.random()
+        f = loss[i] / lossNew[i]
+        f = f.item()
 
+        if decider < f:
+          newIndexes[i] = trainDataIndexes[i]
+          numberOfKeep += 1
+
+      # print('Number of keep: ' + str(numberOfKeep / len(trainDataIndexes)))
       # hasDuplicates = len(newIndexes) != len(set(newIndexes))
       # if hasDuplicates:
       #   print('Duplicates found!!')
