@@ -122,31 +122,45 @@ class Net(nn.Module):
       pool = [x for x in range(0, trainData.shape[0]) if x not in trainDataIndexes]
 
       # Pick trainDataIndexes.size() random indexes from pool
-      newIndexes = random.sample(pool, len(trainDataIndexes))
-      newIndexes.sort()
+      newIndexes = random.sample(pool, len(trainDataIndexes) * 2)
+
+      # split into two groups
+      newIndexs1 = newIndexes[:len(trainDataIndexes)]
+      newIndexs2 = newIndexes[len(trainDataIndexes):]
+
+
+      newIndexs1.sort()
+      newIndexs2.sort()
+
       # check losses for new indexes
-      data, target = self.getBatch(newIndexes)
+      data, target = self.getBatch(newIndexs1)
       output = network(data)
-      lossNew = F.cross_entropy(output, target, reduction='none')
+      lossNew1 = F.cross_entropy(output, target, reduction='none')
+
+      data, target = self.getBatch(newIndexs2)
+      output = network(data)
+      lossNew2 = F.cross_entropy(output, target, reduction='none')
 
       numberOfKeep = 0
       # Keep indexes from trainDataIndexes where lossNew > loss
       for i in range(0, len(trainDataIndexes)):
         decider = random.random()
-        f = loss[i] / lossNew[i]
+        # f = loss[i] / lossNew[i]
+        f = lossNew1[i] / lossNew2[i]
         f = f.item()
 
         if decider < f:
-          newIndexes[i] = trainDataIndexes[i]
+          # newIndexes[i] = trainDataIndexes[i]
+          newIndexs1[i] = newIndexs2[i]
           numberOfKeep += 1
 
-      # print('Number of keep: ' + str(numberOfKeep / len(trainDataIndexes)))
+      print('Number of keep: ' + str(numberOfKeep / len(trainDataIndexes)))
       # hasDuplicates = len(newIndexes) != len(set(newIndexes))
       # if hasDuplicates:
       #   print('Duplicates found!!')
-      newIndexes.sort()
+      newIndexs1.sort()
       network.train()
-      return newIndexes
+      return newIndexs1
 
     def getNextTrainDataIndexesUsingImportanceSampling2(self, trainDataIndexes, loss):
       network.eval()
@@ -241,7 +255,7 @@ class Net(nn.Module):
             lossTrain,
             lossTest,
             'mnist - camyleon',
-            5,
+            7,
             'batch loss importance sampling',
           )
 
