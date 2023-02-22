@@ -25,7 +25,7 @@ def getLossGraph(
   train_loader,
   network,
   showPlot: bool = True
-):
+) -> torch.Tensor:
   with torch.no_grad():
     losses = torch.zeros(len(train_loader.dataset))
     for batch_idx, (data, target) in enumerate(train_loader):
