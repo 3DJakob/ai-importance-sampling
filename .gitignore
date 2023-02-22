@@ -156,3 +156,4 @@ cython_debug/
 *.h5
 *.gz
 histopathologic-cancer-detection
+data
