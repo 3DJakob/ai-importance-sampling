@@ -4,9 +4,10 @@ from helper import plot
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from importance_samplers.loss_sort import lossSortTrainLoader, getLossGraph
 
 n_epochs = 10
-batch_size_train = 64
+batch_size_train = 100
 batch_size_test = 1000
 learning_rate = 0.01
 momentum = 0.5
@@ -24,7 +25,7 @@ train_loader_mnist = torch.utils.data.DataLoader(
                               #  torchvision.transforms.Normalize(
                               #    (0.1307,), (0.3081,))
                              ])),
-  batch_size=batch_size_train, shuffle=True)
+  batch_size=batch_size_train, shuffle=False)
 
 test_loader_mnist = torch.utils.data.DataLoader(
   torchvision.datasets.MNIST(root='./data', train=False, download=True,
@@ -33,7 +34,7 @@ test_loader_mnist = torch.utils.data.DataLoader(
                               #  torchvision.transforms.Normalize(
                               #    (0.1307,), (0.3081,))
                              ])),
-  batch_size=batch_size_test, shuffle=True)
+  batch_size=batch_size_test, shuffle=False)
 
 train_loader = train_loader_mnist
 test_loader = test_loader_mnist
@@ -103,7 +104,7 @@ class Net(nn.Module):
 
           print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
             epoch, batch_idx * len(data), len(train_loader.dataset),
-            100. * batch_idx / len(train_loader), loss.item()))
+            100. * batch_idx / (train_loader.dataset.data.shape[0] / batch_size_train), loss.item()))
           train_losses.append(loss.item())
           train_counter.append(
             (batch_idx*64) + ((epoch-1)*len(train_loader.dataset)))
@@ -139,7 +140,9 @@ test_counter = [i*len(train_loader.dataset) for i in range(n_epochs + 1)]
 
 accPlot = []
 
+# Activate loss sort
+train_loader = lossSortTrainLoader(train_loader, network, batch_size_train)
+
 for epoch in range(1, n_epochs + 1):
   network.trainEpoch(epoch)
-
 
