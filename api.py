@@ -47,5 +47,15 @@ def logNetwork (
     u'model': model
   })
 
+def log3DNodes (
+  nodes,
+  networkName: str,
+) -> None:
+  doc_ref = db.collection(u'networks').document(networkName)
+  doc_ref.set({
+    u'nodes': nodes,
+  }, merge=True)
+
+
 
 # logNetwork([1,2,3], [0.1, 0.2, 0.3], 'test')
