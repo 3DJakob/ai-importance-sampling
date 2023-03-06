@@ -23,9 +23,12 @@ transform = transforms.Compose(
   [transforms.ToTensor(),
   transforms.Normalize((0.5, 0.5, 0.5), 
                        (0.5, 0.5, 0.5))])
-
+ 
 BATCH_SIZE = 32
-NUM_EPOCHS = 15
+SELECTION_FRACTION = 1
+NUM_EPOCHS = 10*SELECTION_FRACTION
+METHOD = 'highest loss'
+
 trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                         download=True, transform=transform)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE,
@@ -196,7 +199,7 @@ def evaluate_class_performance(net, testloader, classes):
                                 for j in range(BATCH_SIZE)))
 
 
-  # log3DNodes(networkTo3dNodes(net, 32, 32, 3), 'CIFAR10')
+  log3DNodes(networkTo3dNodes(net, 32, 32, 3), 'CIFAR10')
   
   
   
@@ -244,6 +247,34 @@ def evaluate_accuracy(net, testloader):
 
   return correct, total
 
+def sampling_method(net, inputs, labels):
+  
+  if METHOD == 'random':
+    return inputs, labels
+  
+  net.eval()
+  with torch.no_grad():
+    outputs = net(inputs)
+    loss = criterion(outputs, labels)
+    loss, indices = torch.sort(loss, descending=True)
+  
+  
+  if METHOD == 'evenly spaced loss':
+    # select evenly spaced indices
+    indices[::len(indices)//(BATCH_SIZE//SELECTION_FRACTION)]
+    return inputs[indices], labels[indices]
+  elif METHOD == 'highest loss':
+    # select highest loss values
+    indices[:BATCH_SIZE//SELECTION_FRACTION]
+    return inputs[indices], labels[indices]
+  elif METHOD == 'lowest loss':
+    # select lowest loss values
+    indices[-BATCH_SIZE//SELECTION_FRACTION:]
+    return inputs[indices], labels[indices]
+  else:
+    print('Invalid sampling method')
+    return None, None
+
 def train(num_epochs, trainloader):
   loss_history={"train": [],"val": []} # history of loss values in each epoch
   metric_history={"train": [],"val": []} # histroy of metric values in each epoch
@@ -264,43 +295,35 @@ def train(num_epochs, trainloader):
       'CrossEntropyLoss',
       'Custom',
     )
-  
+
   for epoch in range(num_epochs):  # loop over the dataset multiple times
   
     print('\nEpoch',epoch+1)
     print('Training')
     running_loss = 0.0
-
     
     
     # train
-    net.train()
     for batch_number, data in enumerate(trainloader, 0):
-      
       # get the inputs; data is a list of [inputs, labels] 
       data = next(iter(trainloader))
       inputs, labels = data
 
       inputs = inputs.to(device)
       labels = labels.to(device)
+      
+      
+      batch_inputs, labels = sampling_method(net, inputs, labels)
+
       # zero the parameter gradients
       optimizer.zero_grad()
+      
+      net.train() 
+      outputs = net(batch_inputs)
 
-      # forward + backward + optimize
-      outputs = net(inputs)
+      '''Calculate batch loss'''
       loss = criterion(outputs, labels)
 
-      # sort loss values
-      loss, indices = torch.sort(loss, descending=True)
-      # select evenly spaced indices
-      indices = indices[::len(indices)//(BATCH_SIZE//4)]
-
-      mini_batch_inputs, mini_batch_labels = (inputs[indices], labels[indices])
-
-      mini_batch_outputs = net(mini_batch_inputs)
-      
-      # Calculate mini-batch loss
-      loss = criterion(mini_batch_outputs, mini_batch_labels)
       # mean loss
       loss = loss.sum()
       loss.backward()
@@ -311,33 +334,38 @@ def train(num_epochs, trainloader):
 
       printProgressBar(batch_number+1, len(trainloader.dataset)/BATCH_SIZE, length=50)
 
+    print(net.parameters())
     # print loss
     print()
-    print(f'[{epoch + 1}] loss: {running_loss / len(trainloader.dataset):.3f}')
+    print(f'[{epoch+1}] loss: {running_loss / len(trainloader.dataset):.3f}')
 
     correct, total = evaluate_accuracy(net, testloader)
     
-
+    
     print()
     print(f'Accuracy on {total} test images: {correct} / {total}    = {100 * correct / total:.2f} %')
 
-    metric_history["train"].append(100 * correct // total)
-    loss_history["train"].append(running_loss / len(trainloader.dataset))
-
-    metric_history["val"].append(100 * correct // total)
-    loss_history["val"].append(running_loss / len(trainloader.dataset))
-    
     '''Save data to database'''
-    logRun(
-        timestamps,
-        accuracyTrain,
-        accuracyTest,
-        lossTrain,
-        lossTest,
-        'CIFAR10',
-        1,
-        'Random sampling',
-      )
+    active_run = epoch+1
+
+    if active_run % SELECTION_FRACTION == 0:
+      print('Saving data to database')
+      metric_history["train"].append(100 * correct / total)
+      loss_history["train"].append(running_loss / len(trainloader.dataset))
+
+      metric_history["val"].append(100 * correct / total)
+      loss_history["val"].append(running_loss / len(trainloader.dataset))
+
+      logRun(
+          timestamps,
+          accuracyTrain,
+          accuracyTest,
+          lossTrain,
+          lossTest,
+          'CIFAR10',
+          8,
+          'Batch: 1/' + str(SELECTION_FRACTION) +' of ' + str(BATCH_SIZE) +' - '+ METHOD,
+        )
     # print('Updating data loader')
     # trainloader = equalLossTrainLoader(trainloader, net, BATCH_SIZE)
   return loss_history, metric_history
