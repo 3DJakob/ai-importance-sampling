@@ -3,8 +3,6 @@ from firebase_admin import credentials, firestore
 cred = credentials.Certificate("ai-sampling-firebase-adminsdk-hesqz-7052dd026a.json")
 firebase_admin.initialize_app(cred)
 db = firestore.client()
-doc_ref = db.collection(u'test').document(u'hello')
-doc_ref.set({ u'first': u'Hello' })
 
 def logRun (
     timestamps: list[float],
