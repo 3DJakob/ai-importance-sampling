@@ -6,14 +6,14 @@ import torch.nn.functional as F
 import torch.optim as optim
 from importance_samplers.loss_sort import lossSortTrainLoader, getLossGraph, equalLossTrainLoader
 from importance_samplers.gradient_loss import gradientLossSortTrainLoader
-from api import logRun
+from api import logRun, logNetwork
 from libs.nodes_3d import networkTo3dNodes
-
-
+from importance_samplers_mini_batch.samplers import uniform, mostLoss, distributeLoss, leastLoss
 
 n_epochs = 10
-batch_size_train = 100
-batch_size_test = 1000
+batch_size_train = 1024
+mini_batch_size_train = 128
+batch_size_test = 1024
 learning_rate = 0.01
 momentum = 0.5
 log_interval = 30
@@ -61,8 +61,8 @@ WIDTH = trainData.shape[2]
 if (len(trainData.shape) > 3):
   CHANNELS = trainData.shape[3]
 
-examples = enumerate(test_loader)
-batch_idx, (example_data, example_targets) = next(examples)
+# examples = enumerate(test_loader)
+# batch_idx, (example_data, example_targets) = next(examples)
 
 class Net(nn.Module):
     def __init__(self):
@@ -107,33 +107,37 @@ class Net(nn.Module):
 
       # get first data sample in enumarate order from train loader
       batch_idx = 0
-      # while True:
-      #   data = next(iter(train_loader))[0]
-      #   target = next(iter(train_loader))[1]
+      NUMBER_OF_BATCHES = train_loader.dataset.data.shape[0] / batch_size_train
 
-
-
+      # iterate over all batches
+      
       for batch_idx, (data, target) in enumerate(train_loader):
+        [data, target] = uniform(data, target, mini_batch_size_train)
+        # [data, target] = mostLoss(data, target, mini_batch_size_train, network)
+        # [data, target] = distributeLoss(data, target, mini_batch_size_train, network)
+        # [data, target] = leastLoss(data, target, mini_batch_size_train, network)
+
         optimizer.zero_grad()
         output = network(data)
         loss = F.cross_entropy(output, target)
         loss.backward()
         optimizer.step()
 
-        if batch_idx % log_interval == 0:
-          acc = self.test()
-          accPlot.append(acc)
-          plot(accPlot, None)
+        acc = self.test()
+        accPlot.append(acc)
+        lossPlot.append(loss.item())
+        plot(accPlot, None)
 
+        if batch_idx % log_interval == 0:
           logRun(
             [],
             [],
             accPlot,
             [],
-            [],
-            'mnist',
-            12,
-            'gradient norm',
+            lossPlot,
+            'mnist - mini',
+            1,
+            'uniform',
           )
 
           print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -181,21 +185,22 @@ test_losses = []
 test_counter = [i*len(train_loader.dataset) for i in range(n_epochs + 1)]
 
 accPlot = []
+lossPlot = []
 print('Starting training')
 # Activate loss sort
 # train_loader = lossSortTrainLoader(train_loader, network, batch_size_train)
-train_loader = gradientLossSortTrainLoader(train_loader, network, optimizer, batch_size_train)
+# train_loader = gradientLossSortTrainLoader(train_loader, network, optimizer, batch_size_train)
 # train_loader = equalLossTrainLoader(train_loader, network, batch_size_train)
 
-# logNetwork(
-#   batch_size_train,
-#   batch_size_test,
-#   'mnist',
-#   learning_rate,
-#   'adam',
-#   'cross entropy',
-#   'foobar',
-# )
+logNetwork(
+  batch_size_train,
+  batch_size_test,
+  'mnist - mini',
+  learning_rate,
+  'adam',
+  'cross entropy',
+  'foobar',
+)
 
 for epoch in range(1, n_epochs + 1):
   network.trainEpoch(epoch)
