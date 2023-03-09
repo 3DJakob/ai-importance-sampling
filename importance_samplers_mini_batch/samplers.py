@@ -43,4 +43,30 @@ def distributeLoss (data, target, mini_batch_size, network):
       data = data[indexes]
       target = target[indexes]
       return data, target
+
+
+def compute_grad(sample, target, model, loss_fn):
     
+  sample = sample.unsqueeze(0)  # prepend batch dimension for processing
+  target = target.unsqueeze(0)
+
+  prediction = model(sample)
+  loss = loss_fn(prediction, target)
+
+  # return torch.autograd.grad(loss, list(model.parameters()))
+  # return torch.autograd.grad(loss, model.parameters())
+  # return sum float
+  return torch.autograd.grad(loss, model.parameters(), create_graph=True)[0].norm(2).item()
+
+def gradientNorm (data, target, mini_batch_size, network):
+  grads = [compute_grad(data[i], target[i], network, F.cross_entropy) for i in range(mini_batch_size)]
+  # list to torch tensor
+  grads = torch.FloatTensor(grads)
+  # sample_grads = zip(*sample_grads)
+  # sample_grads = [torch.stack(shards) for shards in sample_grads]
+  # sort data by the grads
+  sortedGrads, sortedIndices = torch.sort(grads, descending=True)[:mini_batch_size]
+  data = data[sortedIndices]
+  target = target[sortedIndices]
+  return data, target
+
