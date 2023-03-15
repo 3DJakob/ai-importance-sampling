@@ -4,14 +4,19 @@ from helper import plot
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from importance_samplers.loss_sort import lossSortTrainLoader, getLossGraph
+from importance_samplers.loss_sort import lossSortTrainLoader, getLossGraph, equalLossTrainLoader
+from importance_samplers.gradient_loss import gradientLossSortTrainLoader
+from api import logRun
+from libs.nodes_3d import networkTo3dNodes
+
+
 
 n_epochs = 10
 batch_size_train = 100
 batch_size_test = 1000
 learning_rate = 0.01
 momentum = 0.5
-log_interval = 10
+log_interval = 30
 
 random_seed = 1
 torch.backends.cudnn.enabled = False
@@ -63,7 +68,11 @@ class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+        self.maxPool = nn.MaxPool2d(2)
+        self.relu = nn.ReLU()
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+        self.maxPool2 = nn.MaxPool2d(2)
+        self.relu2 = nn.ReLU()
         self.conv2_drop = nn.Dropout2d()
         self.linearSize = self.getLinearSize()
         self.fc1 = nn.Linear(self.linearSize, 50)
@@ -77,8 +86,9 @@ class Net(nn.Module):
       return size
 
     def convForward(self, x) -> torch.Tensor:
-      x = F.relu(F.max_pool2d(self.conv1(x), 2))
-      x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
+      x = self.relu(self.maxPool(self.conv1(x)))
+      # x = self.relu(self.maxPool(self.conv2_drop(self.conv2(x))))
+      x = self.relu(self.maxPool(self.conv2(x)))
       return x
 
     def forward(self, x):
@@ -91,16 +101,40 @@ class Net(nn.Module):
 
     def trainEpoch(self, epoch):
       network.train()
+
+      # global train_loader
+      global train_loader
+
+      # get first data sample in enumarate order from train loader
+      batch_idx = 0
+      # while True:
+      #   data = next(iter(train_loader))[0]
+      #   target = next(iter(train_loader))[1]
+
+
+
       for batch_idx, (data, target) in enumerate(train_loader):
         optimizer.zero_grad()
         output = network(data)
         loss = F.cross_entropy(output, target)
         loss.backward()
         optimizer.step()
+
         if batch_idx % log_interval == 0:
           acc = self.test()
           accPlot.append(acc)
           plot(accPlot, None)
+
+          logRun(
+            [],
+            [],
+            accPlot,
+            [],
+            [],
+            'mnist',
+            12,
+            'gradient norm',
+          )
 
           print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
             epoch, batch_idx * len(data), len(train_loader.dataset),
@@ -110,6 +144,14 @@ class Net(nn.Module):
             (batch_idx*64) + ((epoch-1)*len(train_loader.dataset)))
           # torch.save(network.state_dict(), '/results/model.pth')
           # torch.save(optimizer.state_dict(), '/results/optimizer.pth')
+      
+        batch_idx += 1
+        # resort train loader
+        # train_loader = equalLossTrainLoader(train_loader, network, batch_size_train)
+        # train_loader = lossSortTrainLoader(train_loader, network, batch_size_train)
+        # train_loader = gradientLossSortTrainLoader(train_loader, network, optimizer, batch_size_train)
+
+      
 
     def test(self):
       network.eval()
@@ -139,10 +181,34 @@ test_losses = []
 test_counter = [i*len(train_loader.dataset) for i in range(n_epochs + 1)]
 
 accPlot = []
-
+print('Starting training')
 # Activate loss sort
-train_loader = lossSortTrainLoader(train_loader, network, batch_size_train)
+# train_loader = lossSortTrainLoader(train_loader, network, batch_size_train)
+train_loader = gradientLossSortTrainLoader(train_loader, network, optimizer, batch_size_train)
+# train_loader = equalLossTrainLoader(train_loader, network, batch_size_train)
+
+# logNetwork(
+#   batch_size_train,
+#   batch_size_test,
+#   'mnist',
+#   learning_rate,
+#   'adam',
+#   'cross entropy',
+#   'foobar',
+# )
 
 for epoch in range(1, n_epochs + 1):
   network.trainEpoch(epoch)
 
+# Perform torch summery
+
+
+# sum = summary(network, input_size=(3, 96, 96),device='cpu')
+
+
+# print(network)
+
+# get the network node dimensions and save them to a file
+
+# nodes = networkTo3dNodes(network, HEIGHT, WIDTH, CHANNELS)
+# log3DNodes(nodes, 'mnist')

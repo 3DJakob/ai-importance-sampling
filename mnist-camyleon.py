@@ -8,7 +8,8 @@ import math
 import numpy as np
 import time
 import random
-from api import logNetwork, logRun
+from api import logNetwork, logRun, logLoss
+from importance_samplers.loss_sort import lossSortTrainLoader, getLossGraph
 
 n_epochs = 10
 batch_size_train = 64
@@ -116,6 +117,81 @@ class Net(nn.Module):
       target = target.reshape(target.shape[0])
       return data, target
     
+    def monteCarloImportanceSampling(self, trainDataIndexes, loss):
+      network.eval()
+      # pool of possible new index candidates no duplicates and no already selected indexes
+      pool = [x for x in range(0, trainData.shape[0]) if x not in trainDataIndexes]
+
+      # Pick trainDataIndexes.size() random indexes from pool
+      newIndexes = random.sample(pool, len(trainDataIndexes) * 2)
+
+      # split into two groups
+      newIndexs1 = newIndexes[:len(trainDataIndexes)]
+      newIndexs2 = newIndexes[len(trainDataIndexes):]
+
+
+      newIndexs1.sort()
+      newIndexs2.sort()
+
+      # check losses for new indexes
+      data, target = self.getBatch(newIndexs1)
+      output = network(data)
+      lossNew1 = F.cross_entropy(output, target, reduction='none')
+
+      data, target = self.getBatch(newIndexs2)
+      output = network(data)
+      lossNew2 = F.cross_entropy(output, target, reduction='none')
+
+      # calculate importance sampling weights
+      weights = torch.exp(loss - lossNew1) + torch.exp(loss - lossNew2)
+
+      # normalize weights
+      weights = weights / torch.sum(weights)
+
+      # sample new indexes
+      newIndexes = torch.multinomial(weights, len(trainDataIndexes), replacement=False)
+      # sort new indexes
+      newIndexes = torch.sort(newIndexes)[0]
+      # print(newIndexes)
+      # return new indexes
+      return newIndexes
+
+    def logLossGraph(self):
+      network.eval()
+      # get all indexes for index array
+      # indexes = [x for x in range(0, 1000)]
+      # indexes = [x for x in range(0, trainData.shape[0])]
+
+      loss = []
+
+      for i in range(0, int(trainData.shape[0] / 64)):
+        indexes = [x for x in range(i * 64, (i + 1) * 64)]
+        print("Batch: " + str(i) + "/" + str(int(trainData.shape[0] / 64)), end='\r')
+        # get batch
+        data, target = self.getBatch(indexes)
+        # get output
+        output = network(data)
+        # get loss
+        lossCurrent = F.cross_entropy(output, target).item()
+        loss.append(lossCurrent)
+
+
+      # # get batch
+      # data, target = self.getBatch(indexes)
+      # # get output
+      # output = network(data)
+      # # get loss
+      # loss = F.cross_entropy(output, target, reduction='none')
+
+      # # torch loss to float list
+      # loss = loss.tolist()
+
+      logLoss('mnist - camyleon', 1, loss)
+      print(loss)
+      
+
+     
+
     def getNextTrainDataIndexesUsingImportanceSampling(self, trainDataIndexes, loss):
       network.eval()
       # pool of possible new index candidates no duplicates and no already selected indexes
@@ -216,6 +292,7 @@ class Net(nn.Module):
         
         # batch importance sampling
         trainDataIndexes = self.getNextTrainDataIndexesUsingImportanceSampling(trainDataIndexes, loss)
+        # trainDataIndexes = self.monteCarloImportanceSampling(trainDataIndexes, loss)
         # in order sampling
         # trainDataIndexes = range(i * batch_size_train, (i + 1) * batch_size_train)
         # random sampling
@@ -248,6 +325,7 @@ class Net(nn.Module):
         
         # logRun every 20 iterations
         if (i+1) % 20 == 0:
+          network.logLossGraph()
           logRun(
             timestamps,
             accuracyTrain,
@@ -255,8 +333,8 @@ class Net(nn.Module):
             lossTrain,
             lossTest,
             'mnist - camyleon',
-            7,
-            'batch loss importance sampling',
+            9,
+            'loss pre sort',
           )
 
         start = time.time()
@@ -327,6 +405,9 @@ test_losses = []
 test_counter = [i*len(train_loader.dataset) for i in range(n_epochs + 1)]
 
 accPlot = []
+
+print('Start sorting')
+train_loader = lossSortTrainLoader(train_loader, network, batch_size_train)
 
 for epoch in range(1, n_epochs + 1):
   network.trainEpoch(epoch)
