@@ -13,6 +13,7 @@ def logRun (
     networkName: str,
     run: int,
     runName: str,
+    importanceSamplingToggleIndexes: list[int] = [],
   ) -> None:
   doc_ref = db.collection(u'networks').document(networkName).collection(u'runs').document(str(run))
   doc_ref.set({
@@ -22,6 +23,7 @@ def logRun (
     u'lossTrain': lossTrain,
     u'lossTest': lossTest,
     u'name': runName,
+    u'importanceSamplingToggleIndexes': importanceSamplingToggleIndexes,
   }
 )
 
@@ -43,6 +45,16 @@ def logNetwork (
     u'optimizer': optimizer,
     u'lossFunction': lossFunction,
     u'model': model
+  })
+
+def logLoss (
+  networkName: str,
+  run: int,
+  loss: list[float],
+) -> None:
+  doc_ref = db.collection(u'networks').document(networkName).collection(u'loss').document(str(run))
+  doc_ref.set({
+    u'loss': loss,
   })
 
 def log3DNodes (
