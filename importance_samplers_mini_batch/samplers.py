@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import time
 
 def uniform (data, target, mini_batch_size):
     # pick mini batch samples randomly
@@ -53,12 +54,18 @@ def compute_grad(sample, target, model, loss_fn):
   prediction = model(sample)
   loss = loss_fn(prediction, target)
 
-  # return torch.autograd.grad(loss, list(model.parameters()))
-  # return torch.autograd.grad(loss, model.parameters())
-  # return sum float
-  return torch.autograd.grad(loss, model.parameters(), create_graph=True)[0].norm(2).item()
+  # last layer grad
+  lastLayer = list(model.parameters())[-1]
+  lastLayerGrad = torch.autograd.grad(loss, lastLayer, create_graph=True)[0].norm(2).item()
 
+  # return torch.autograd.grad(loss, model.parameters(), create_graph=True)[0].norm(2).item()
+  return lastLayerGrad
+
+# averageTime = 0
 def gradientNorm (data, target, mini_batch_size, network):
+  # global averageTime
+  # start = time.time()
+
   grads = [compute_grad(data[i], target[i], network, F.cross_entropy) for i in range(mini_batch_size)]
   # list to torch tensor
   grads = torch.FloatTensor(grads)
@@ -68,5 +75,12 @@ def gradientNorm (data, target, mini_batch_size, network):
   sortedGrads, sortedIndices = torch.sort(grads, descending=True)[:mini_batch_size]
   data = data[sortedIndices]
   target = target[sortedIndices]
-  return data, target
+
+  # end = time.time()
+  # if (averageTime == 0):
+  #   averageTime = end - start
+  # else:
+  #   averageTime = (averageTime + (end - start)) / 2
+  # print("gradientNorm time: ", averageTime)
+  return data, target, sortedGrads
 
