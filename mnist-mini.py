@@ -8,7 +8,8 @@ from importance_samplers.loss_sort import lossSortTrainLoader, getLossGraph, equ
 from importance_samplers.gradient_loss import gradientLossSortTrainLoader
 from api import logRun, logNetwork
 from libs.nodes_3d import networkTo3dNodes
-from importance_samplers_mini_batch.samplers import uniform, mostLoss, distributeLoss, leastLoss
+from importance_samplers_mini_batch.samplers import uniform, mostLoss, distributeLoss, leastLoss, gradientNorm
+import time
 
 n_epochs = 10
 batch_size_train = 1024
@@ -18,10 +19,15 @@ learning_rate = 0.01
 momentum = 0.5
 log_interval = 30
 
-random_seed = 1
+# random_seed = 1
+random_seed = torch.randint(0, 100000, (1,)).item()
 torch.backends.cudnn.enabled = False
 torch.manual_seed(random_seed)
 import h5py
+
+from libs.VarianceReductionCondition import VarianceReductionCondition 
+
+reductionCondition = VarianceReductionCondition()
 
 train_loader_mnist = torch.utils.data.DataLoader(
   torchvision.datasets.MNIST(root='./data', train=True, download=True,
@@ -30,7 +36,7 @@ train_loader_mnist = torch.utils.data.DataLoader(
                               #  torchvision.transforms.Normalize(
                               #    (0.1307,), (0.3081,))
                              ])),
-  batch_size=batch_size_train, shuffle=False)
+  batch_size=batch_size_train, shuffle=True)
 
 test_loader_mnist = torch.utils.data.DataLoader(
   torchvision.datasets.MNIST(root='./data', train=False, download=True,
@@ -112,7 +118,25 @@ class Net(nn.Module):
       # iterate over all batches
       
       for batch_idx, (data, target) in enumerate(train_loader):
-        [data, target] = uniform(data, target, mini_batch_size_train)
+        # start time
+        start = time.time()
+
+        # [data, target] = uniform(data, target, mini_batch_size_train)
+
+        [data, target, importance] = gradientNorm(data, target, mini_batch_size_train, network)
+
+        # importance sampling
+        # [data2, target2, importance] = gradientNorm(data, target, mini_batch_size_train, network)
+        # reductionCondition.update(importance)
+        # if reductionCondition.satisfied.item():
+        #   data = data2
+        #   target = target2
+        #   print('importance satisfied')
+        # else:
+        #   [data, target] = uniform(data, target, mini_batch_size_train)
+
+       
+
         # [data, target] = mostLoss(data, target, mini_batch_size_train, network)
         # [data, target] = distributeLoss(data, target, mini_batch_size_train, network)
         # [data, target] = leastLoss(data, target, mini_batch_size_train, network)
@@ -128,6 +152,10 @@ class Net(nn.Module):
         lossPlot.append(loss.item())
         plot(accPlot, None)
 
+        # end time
+        end = time.time()
+        print('time: ' + str(end - start))
+
         if batch_idx % log_interval == 0:
           logRun(
             [],
@@ -136,8 +164,8 @@ class Net(nn.Module):
             [],
             lossPlot,
             'mnist - mini',
-            1,
-            'uniform',
+            25,
+            'gradient norm last layer',
           )
 
           print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -192,15 +220,15 @@ print('Starting training')
 # train_loader = gradientLossSortTrainLoader(train_loader, network, optimizer, batch_size_train)
 # train_loader = equalLossTrainLoader(train_loader, network, batch_size_train)
 
-logNetwork(
-  batch_size_train,
-  batch_size_test,
-  'mnist - mini',
-  learning_rate,
-  'adam',
-  'cross entropy',
-  'foobar',
-)
+# logNetwork(
+#   batch_size_train,
+#   batch_size_test,
+#   'mnist - mini',
+#   learning_rate,
+#   'adam',
+#   'cross entropy',
+#   'foobar',
+# )
 
 for epoch in range(1, n_epochs + 1):
   network.trainEpoch(epoch)
