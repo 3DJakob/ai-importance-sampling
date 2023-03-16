@@ -16,7 +16,7 @@ n_epochs = 10
 batch_size_train = 1024
 mini_batch_size_train = 128
 batch_size_test = 1024
-learning_rate = 0.01
+learning_rate = 0.0001
 momentum = 0.5
 log_interval = 30
 
@@ -30,29 +30,11 @@ from libs.VarianceReductionCondition import VarianceReductionCondition
 
 reductionCondition = VarianceReductionCondition()
 
-train_loader_camyleon = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=batch_size_train, shuffle=True)
-train_loader_camyleon_targets = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=batch_size_train, shuffle=True)
+train_loader_camyleon = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=batch_size_train, shuffle=False)
+train_loader_camyleon_targets = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=batch_size_train, shuffle=False)
 # images = train_loader_camyleon.dataset['x']
 test_loader_camyleon = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=batch_size_test, shuffle=False)
 test_loader_camyleon_targets = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=batch_size_test, shuffle=False)
-
-# train_loader_mnist = torch.utils.data.DataLoader(
-#   torchvision.datasets.MNIST(root='./data', train=True, download=True,
-#                              transform=torchvision.transforms.Compose([
-#                                torchvision.transforms.ToTensor(),
-#                               #  torchvision.transforms.Normalize(
-#                               #    (0.1307,), (0.3081,))
-#                              ])),
-#   batch_size=batch_size_train, shuffle=True)
-
-# test_loader_mnist = torch.utils.data.DataLoader(
-#   torchvision.datasets.MNIST(root='./data', train=False, download=True,
-#                              transform=torchvision.transforms.Compose([
-#                                torchvision.transforms.ToTensor(),
-#                               #  torchvision.transforms.Normalize(
-#                               #    (0.1307,), (0.3081,))
-#                              ])),
-#   batch_size=batch_size_test, shuffle=False)
 
 train_loader = train_loader_camyleon
 test_loader = test_loader_camyleon
@@ -85,10 +67,10 @@ if (len(trainData.shape) > 3):
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(CHANNELS, 10 * CHANNELS, kernel_size=5)
+        self.conv1 = nn.Conv2d(CHANNELS, 8 * CHANNELS, kernel_size=5)
         self.maxPool = nn.MaxPool2d(2)
         self.relu = nn.ReLU()
-        self.conv2 = nn.Conv2d(10 * CHANNELS, 20 * CHANNELS, kernel_size=5)
+        self.conv2 = nn.Conv2d(8 * CHANNELS, 16 * CHANNELS, kernel_size=5)
         self.maxPool2 = nn.MaxPool2d(2)
         self.relu2 = nn.ReLU()
         self.conv2_drop = nn.Dropout2d()
