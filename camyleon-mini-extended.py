@@ -69,16 +69,19 @@ if (len(trainData.shape) > 3):
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(CHANNELS, 8 * CHANNELS, kernel_size=5, device=device)
+        self.conv1 = nn.Conv2d(CHANNELS, 16 * CHANNELS, kernel_size=5, device=device)
         self.maxPool = nn.MaxPool2d(2).to(device)
         self.relu = nn.ReLU().to(device)
-        self.conv2 = nn.Conv2d(8 * CHANNELS, 16 * CHANNELS, kernel_size=5, device=device)
+        self.conv2 = nn.Conv2d(16 * CHANNELS, 32 * CHANNELS, kernel_size=5, device=device)
         self.maxPool2 = nn.MaxPool2d(2).to(device)
         self.relu2 = nn.ReLU().to(device)
+        self.conv3 = nn.Conv2d(32 * CHANNELS, 64 * CHANNELS, kernel_size=5, device=device)
+        self.maxPool3 = nn.MaxPool2d(2).to(device)
+        self.relu3 = nn.ReLU().to(device)
         self.conv2_drop = nn.Dropout2d().to(device)
         self.linearSize = self.getLinearSize()
-        self.fc1 = nn.Linear(self.linearSize, 50, device=device)
-        self.fc2 = nn.Linear(50, 10, device=device)
+        self.fc1 = nn.Linear(self.linearSize, 200, device=device)
+        self.fc2 = nn.Linear(200, 10, device=device)
         
     def getLinearSize (self):
       testMat = torch.zeros(1, CHANNELS, HEIGHT, WIDTH, device=device)
@@ -91,6 +94,10 @@ class Net(nn.Module):
       x = self.relu(self.maxPool(self.conv1(x)))
       # x = self.relu(self.maxPool(self.conv2_drop(self.conv2(x))))
       x = self.relu(self.maxPool(self.conv2(x)))
+      x = self.relu(self.maxPool(self.conv3(x)))
+
+      x = self.relu(self.maxPool(self.conv2_drop(x)))
+
       return x
 
     def forward(self, x):
@@ -177,8 +184,8 @@ class Net(nn.Module):
             [],
             lossPlot,
             'camyleon - mini - extended',
-            0,
-            'uniform',
+            1,
+            'uniform - extended',
           )
 
           print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
