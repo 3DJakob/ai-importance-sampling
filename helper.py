@@ -6,7 +6,7 @@ import torchvision.datasets as dsets
 
 device = torch.device('cpu')
 
-groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
+groundTruth = torch.utils.data.DataLoader(h5py.File('./data/camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
 
 def hasCancer(index):
     return groundTruth.dataset['y'][index][0][0][0]
@@ -64,7 +64,7 @@ def evaluate(agent):
         print('Idential guesses: ', identical)
         return correctlyClassified / 1000
 
-data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=32, shuffle=True)
+data = torch.utils.data.DataLoader(h5py.File('./data/camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=32, shuffle=True)
 images = data.dataset['x']
 testSize = 1000
 
@@ -78,7 +78,7 @@ def getTestAnswers(size):
     return answers
 
 def getTestData(size, randomize = True):       
-    data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=32, shuffle=True)
+    data = torch.utils.data.DataLoader(h5py.File('./data/camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=32, shuffle=True)
     # groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
     images = data.dataset['x']
 
@@ -149,7 +149,7 @@ def getEvaluationMnistData(size):
 
 
 def getTestDataVector(size, randomize = True):       
-    data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=32, shuffle=True)
+    data = torch.utils.data.DataLoader(h5py.File('./data/camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=32, shuffle=True)
     # groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=32, shuffle=True)
     images = data.dataset['x']
 
@@ -182,8 +182,8 @@ def getTestDataVector(size, randomize = True):
 
 
 def getEvaluationData(size):
-    data = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=32, shuffle=True)
-    groundTruth = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=32, shuffle=True)
+    data = torch.utils.data.DataLoader(h5py.File('./data/camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=32, shuffle=True)
+    groundTruth = torch.utils.data.DataLoader(h5py.File('./data/camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=32, shuffle=True)
     
     images = data.dataset['x']
     
