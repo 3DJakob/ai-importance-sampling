@@ -12,6 +12,8 @@ from importance_samplers_mini_batch.samplers import uniform, mostLoss, distribut
 import time
 from libs.logging import printProgressBar
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 n_epochs = 10
 batch_size_train = 1024
 mini_batch_size_train = 128
@@ -30,11 +32,11 @@ from libs.VarianceReductionCondition import VarianceReductionCondition
 
 reductionCondition = VarianceReductionCondition()
 
-train_loader_camyleon = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=batch_size_train, shuffle=False)
-train_loader_camyleon_targets = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=batch_size_train, shuffle=False)
+train_loader_camyleon = torch.utils.data.DataLoader(h5py.File('./data/camelyonpatch_level_2_split_train_x.h5', 'r'), batch_size=batch_size_train, shuffle=False)
+train_loader_camyleon_targets = torch.utils.data.DataLoader(h5py.File('./data/camelyonpatch_level_2_split_train_y.h5', 'r'), batch_size=batch_size_train, shuffle=False)
 # images = train_loader_camyleon.dataset['x']
-test_loader_camyleon = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=batch_size_test, shuffle=False)
-test_loader_camyleon_targets = torch.utils.data.DataLoader(h5py.File('./camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=batch_size_test, shuffle=False)
+test_loader_camyleon = torch.utils.data.DataLoader(h5py.File('./data/camelyonpatch_level_2_split_test_x.h5', 'r'), batch_size=batch_size_test, shuffle=False)
+test_loader_camyleon_targets = torch.utils.data.DataLoader(h5py.File('./data/camelyonpatch_level_2_split_test_y.h5', 'r'), batch_size=batch_size_test, shuffle=False)
 
 train_loader = train_loader_camyleon
 test_loader = test_loader_camyleon
@@ -67,19 +69,19 @@ if (len(trainData.shape) > 3):
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(CHANNELS, 8 * CHANNELS, kernel_size=5)
-        self.maxPool = nn.MaxPool2d(2)
-        self.relu = nn.ReLU()
-        self.conv2 = nn.Conv2d(8 * CHANNELS, 16 * CHANNELS, kernel_size=5)
-        self.maxPool2 = nn.MaxPool2d(2)
-        self.relu2 = nn.ReLU()
-        self.conv2_drop = nn.Dropout2d()
+        self.conv1 = nn.Conv2d(CHANNELS, 8 * CHANNELS, kernel_size=5, device=device)
+        self.maxPool = nn.MaxPool2d(2).to(device)
+        self.relu = nn.ReLU().to(device)
+        self.conv2 = nn.Conv2d(8 * CHANNELS, 16 * CHANNELS, kernel_size=5, device=device)
+        self.maxPool2 = nn.MaxPool2d(2).to(device)
+        self.relu2 = nn.ReLU().to(device)
+        self.conv2_drop = nn.Dropout2d().to(device)
         self.linearSize = self.getLinearSize()
-        self.fc1 = nn.Linear(self.linearSize, 50)
-        self.fc2 = nn.Linear(50, 10)
+        self.fc1 = nn.Linear(self.linearSize, 50, device=device)
+        self.fc2 = nn.Linear(50, 10, device=device)
         
     def getLinearSize (self):
-      testMat = torch.zeros(1, CHANNELS, HEIGHT, WIDTH)
+      testMat = torch.zeros(1, CHANNELS, HEIGHT, WIDTH, device=device)
       testMat = self.convForward(testMat)
       testMat = testMat.flatten()
       size = testMat.size().numel()
@@ -114,10 +116,10 @@ class Net(nn.Module):
       while index < NUMBER_OF_BATCHES:
         data = trainData[index * batch_size_train : (index + 1) * batch_size_train]
         target = train_loader_camyleon_targets.dataset['y'][index * batch_size_train : (index + 1) * batch_size_train]
-        target = torch.from_numpy(target).long().squeeze()
+        target = torch.from_numpy(target).long().squeeze().to(device)
 
         # data as tensor
-        data = torch.from_numpy(data).float()
+        data = torch.from_numpy(data).float().to(device)
         data = data.permute(0, 3, 1, 2)
 
         # torch.Size([1024, 3, 96, 96]) data shape
@@ -209,10 +211,10 @@ class Net(nn.Module):
           printProgressBar(batchIndex+1, NUMBER_OF_BATCHES, length=50)
 
           data = test_loader.dataset['x'][batchIndex * mini_batch_size_train : (batchIndex + 1) * mini_batch_size_train]
-          data = torch.from_numpy(data).float().permute(0, 3, 1, 2)
+          data = torch.from_numpy(data).float().permute(0, 3, 1, 2).to(device)
 
           target = test_loader_camyleon_targets.dataset['y'][batchIndex * mini_batch_size_train : (batchIndex + 1) * mini_batch_size_train]
-          target = torch.from_numpy(target).long().squeeze()
+          target = torch.from_numpy(target).long().squeeze().to(device)
 
 
         # for data, target in test_loader:
