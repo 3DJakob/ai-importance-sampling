@@ -159,9 +159,11 @@ class Net(nn.Module):
 
         if batch_idx % log_interval == 0:
           acc = self.test()
+          accTrain = self.test(True)
           accPlot.append(acc)
+          accTrainPlot.append(accTrain)
           lossPlot.append(loss.item())
-          plot(accPlot, None)
+          plot(accPlot, accTrainPlot)
 
           # end time
           end = time.time()
@@ -170,7 +172,7 @@ class Net(nn.Module):
         # if batch_idx % log_interval == 0:
           logRun(
             [],
-            [],
+            accTrainPlot,
             accPlot,
             [],
             lossPlot,
@@ -196,7 +198,7 @@ class Net(nn.Module):
 
       
 
-    def test(self):
+    def test(self, trainSet=False):
       network.eval()
       test_loss = 0
       correct = 0
@@ -204,17 +206,25 @@ class Net(nn.Module):
       NUMBER_OF_BATCHES = 20
       with torch.no_grad():
 
-        test_loader.dataset['x'].shape[0]
+        loader = test_loader
+        targetLoader = test_loader_camyleon_targets
+        
+        if trainSet:
+          loader = train_loader
+          targetLoader = train_loader_camyleon_targets
+        
+
+        loader.dataset['x'].shape[0]
         batchIndex = 0
 
 
         while batchIndex < NUMBER_OF_BATCHES:
           printProgressBar(batchIndex+1, NUMBER_OF_BATCHES, length=50)
 
-          data = test_loader.dataset['x'][batchIndex * mini_batch_size_train : (batchIndex + 1) * mini_batch_size_train]
+          data = loader.dataset['x'][batchIndex * mini_batch_size_train : (batchIndex + 1) * mini_batch_size_train]
           data = torch.from_numpy(data).float().permute(0, 3, 1, 2).to(device)
 
-          target = test_loader_camyleon_targets.dataset['y'][batchIndex * mini_batch_size_train : (batchIndex + 1) * mini_batch_size_train]
+          target = targetLoader.dataset['y'][batchIndex * mini_batch_size_train : (batchIndex + 1) * mini_batch_size_train]
           target = torch.from_numpy(target).long().squeeze().to(device)
 
 
@@ -246,7 +256,9 @@ test_losses = []
 test_counter = [i*len(train_loader.dataset) for i in range(n_epochs + 1)]
 
 accPlot = []
+accTrainPlot = []
 lossPlot = []
+
 print('Starting training')
 # Activate loss sort
 # train_loader = lossSortTrainLoader(train_loader, network, batch_size_train)
