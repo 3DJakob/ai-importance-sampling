@@ -6,17 +6,19 @@ import torch.nn.functional as F
 import torch.optim as optim
 from importance_samplers.loss_sort import lossSortTrainLoader, getLossGraph, equalLossTrainLoader
 from importance_samplers.gradient_loss import gradientLossSortTrainLoader
-from api import logRun, logNetwork, log3DNodes
+from api import logRun, logNetwork
 from libs.nodes_3d import networkTo3dNodes
 from importance_samplers_mini_batch.samplers import uniform, mostLoss, distributeLoss, leastLoss, gradientNorm
 import time
 from libs.logging import printProgressBar
 
-n_epochs = 1
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+n_epochs = 10
 batch_size_train = 1024
 mini_batch_size_train = 128
 batch_size_test = 1024
-learning_rate = 0.000005
+learning_rate = 0.0001
 momentum = 0.5
 log_interval = 30
 
@@ -67,22 +69,19 @@ if (len(trainData.shape) > 3):
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(CHANNELS, 8 * CHANNELS, kernel_size=5)
-        self.maxPool = nn.MaxPool2d(2)
-        self.relu = nn.ReLU()
-        self.conv2 = nn.Conv2d(8 * CHANNELS, 16 * CHANNELS, kernel_size=5)
-        self.maxPool2 = nn.MaxPool2d(2)
-        self.relu2 = nn.ReLU()
-        self.conv3 = nn.Conv2d(16 * CHANNELS, 32 * CHANNELS, kernel_size=5)
-        self.maxPool3 = nn.MaxPool2d(2)
-        self.relu3 = nn.ReLU()
-        self.conv4 = nn.Conv2d(32 * CHANNELS, 64 * CHANNELS, kernel_size=5)
-        self.maxPool4 = nn.MaxPool2d(2)
-        self.relu4 = nn.ReLU()
-        self.conv2_drop = nn.Dropout2d()
+        self.conv1 = nn.Conv2d(CHANNELS, 16 * CHANNELS, kernel_size=5, device=device)
+        self.maxPool = nn.MaxPool2d(2).to(device)
+        self.relu = nn.ReLU().to(device)
+        self.conv2 = nn.Conv2d(16 * CHANNELS, 32 * CHANNELS, kernel_size=5, device=device)
+        self.maxPool2 = nn.MaxPool2d(2).to(device)
+        self.relu2 = nn.ReLU().to(device)
+        self.conv3 = nn.Conv2d(32 * CHANNELS, 64 * CHANNELS, kernel_size=5, device=device)
+        self.maxPool3 = nn.MaxPool2d(2).to(device)
+        self.relu3 = nn.ReLU().to(device)
+        self.conv2_drop = nn.Dropout2d().to(device)
         self.linearSize = self.getLinearSize()
-        self.fc1 = nn.Linear(self.linearSize, 50, device=device)
-        self.fc2 = nn.Linear(50, 10, device=device)
+        self.fc1 = nn.Linear(self.linearSize, 200, device=device)
+        self.fc2 = nn.Linear(200, 10, device=device)
         
     def getLinearSize (self):
       testMat = torch.zeros(1, CHANNELS, HEIGHT, WIDTH, device=device)
@@ -96,9 +95,9 @@ class Net(nn.Module):
       # x = self.relu(self.maxPool(self.conv2_drop(self.conv2(x))))
       x = self.relu(self.maxPool(self.conv2(x)))
       x = self.relu(self.maxPool(self.conv3(x)))
-      # x = self.relu(self.maxPool(self.conv4(x)))
 
-      x = self.relu(self.maxPool(self.conv2_drop(self.conv4(x))))
+      x = self.relu(self.maxPool(self.conv2_drop(x)))
+
       return x
 
     def forward(self, x):
@@ -164,12 +163,14 @@ class Net(nn.Module):
         loss = F.cross_entropy(output, target)
         loss.backward()
         optimizer.step()
-        
+
         if batch_idx % log_interval == 0:
           acc = self.test()
+          accTrain = self.test(True)
           accPlot.append(acc)
+          accTrainPlot.append(accTrain)
           lossPlot.append(loss.item())
-          plot(accPlot, None)
+          plot(accPlot, accTrainPlot)
 
           # end time
           end = time.time()
@@ -178,13 +179,13 @@ class Net(nn.Module):
         # if batch_idx % log_interval == 0:
           logRun(
             [],
-            [],
+            accTrainPlot,
             accPlot,
             [],
             lossPlot,
-            'camyleon - mini',
-            9,
-            'uniform bigger network lr=' + str(learning_rate) + ' momentum=' + str(momentum),
+            'camyleon - mini - extended',
+            1,
+            'uniform - extended',
           )
 
           print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -204,7 +205,7 @@ class Net(nn.Module):
 
       
 
-    def test(self):
+    def test(self, trainSet=False):
       network.eval()
       test_loss = 0
       correct = 0
@@ -212,23 +213,31 @@ class Net(nn.Module):
       NUMBER_OF_BATCHES = 20
       with torch.no_grad():
 
-        test_loader.dataset['x'].shape[0]
+        loader = test_loader
+        targetLoader = test_loader_camyleon_targets
+        
+        if trainSet:
+          loader = train_loader
+          targetLoader = train_loader_camyleon_targets
+        
+
+        loader.dataset['x'].shape[0]
         batchIndex = 0
 
 
         while batchIndex < NUMBER_OF_BATCHES:
           printProgressBar(batchIndex+1, NUMBER_OF_BATCHES, length=50)
 
-          data = test_loader.dataset['x'][batchIndex * mini_batch_size_train : (batchIndex + 1) * mini_batch_size_train]
+          data = loader.dataset['x'][batchIndex * mini_batch_size_train : (batchIndex + 1) * mini_batch_size_train]
           data = torch.from_numpy(data).float().permute(0, 3, 1, 2).to(device)
 
-          target = test_loader_camyleon_targets.dataset['y'][batchIndex * mini_batch_size_train : (batchIndex + 1) * mini_batch_size_train]
+          target = targetLoader.dataset['y'][batchIndex * mini_batch_size_train : (batchIndex + 1) * mini_batch_size_train]
           target = torch.from_numpy(target).long().squeeze().to(device)
 
 
         # for data, target in test_loader:
           output = network(data)
-          test_loss += F.nll_loss(output, target, reduction='sum').item()
+          # test_loss += F.nll_loss(output, target, reduction='sum').item()
           pred = output.data.max(1, keepdim=True)[1]
           correct += pred.eq(target.data.view_as(pred)).sum()
 
@@ -238,9 +247,9 @@ class Net(nn.Module):
 
       test_loss /= numberOfSamples
       test_losses.append(test_loss)
-      print('\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-        test_loss, correct, numberOfSamples,
-        100. * correct / numberOfSamples))
+      # print('\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+      #   test_loss, correct, numberOfSamples,
+      #   100. * correct / numberOfSamples))
       accTensor = correct / numberOfSamples
       return accTensor.item()
 
@@ -254,7 +263,9 @@ test_losses = []
 test_counter = [i*len(train_loader.dataset) for i in range(n_epochs + 1)]
 
 accPlot = []
+accTrainPlot = []
 lossPlot = []
+
 print('Starting training')
 # Activate loss sort
 # train_loader = lossSortTrainLoader(train_loader, network, batch_size_train)
@@ -264,7 +275,7 @@ print('Starting training')
 logNetwork(
   batch_size_train,
   batch_size_test,
-  'camyleon - mini',
+  'camyleon - mini - extended',
   learning_rate,
   'adam',
   'cross entropy',
@@ -275,4 +286,4 @@ for epoch in range(1, n_epochs + 1):
   network.trainEpoch(epoch)
 
 # nodes = networkTo3dNodes(network, HEIGHT, WIDTH, CHANNELS)
-# log3DNodes(nodes, 'camyleon - mini')
+# log3DNodes(nodes, 'mnist')
