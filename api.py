@@ -13,7 +13,7 @@ def logRun (
     networkName: str,
     run: int,
     runName: str,
-    importanceSamplingToggleIndexes: list[int] = [],
+    importanceSamplingToggleIndex: int,
   ) -> None:
   doc_ref = db.collection(u'networks').document(networkName).collection(u'runs').document(str(run))
   doc_ref.set({
@@ -23,7 +23,7 @@ def logRun (
     u'lossTrain': lossTrain,
     u'lossTest': lossTest,
     u'name': runName,
-    u'importanceSamplingToggleIndexes': importanceSamplingToggleIndexes,
+    u'importanceSamplingToggleIndex': importanceSamplingToggleIndex,
   }
 )
 
