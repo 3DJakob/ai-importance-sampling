@@ -28,11 +28,11 @@ NETWORKNAME = 'mnist - threshold testing'
 RUNNUMBER = 0
 TIMELIMIT = 30
 SAMPLINGTHRESHOLD = 0.74
-RUNNAME = 'gradient norm CDF %f threshold' % SAMPLINGTHRESHOLD
+RUNNAME = 'gradient norm CDF cooler %f threshold' % SAMPLINGTHRESHOLD
 STARTINGSAMPLER = uniform
 IMPORTANCESAMPLER = gradientNorm
 NUMBEROFRUNS = 5
-WARMUPRUNS = 4
+WARMUPRUNS = 0
 
 # n_epochs = 10
 batch_size_train = 1024
@@ -236,8 +236,9 @@ class Net(nn.Module):
 
       if self.initialLoss * SAMPLINGTHRESHOLD > test_loss:
         print('Sampling threshold reached')
-        sampler.setSampler(IMPORTANCESAMPLER)
+        
         if self.importanceSamplingToggleIndex == 0:
+          sampler.setSampler(IMPORTANCESAMPLER)
           self.importanceSamplingToggleIndex = len(self.lossPlot)
 
       # print('\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
