@@ -225,6 +225,8 @@ class Net(nn.Module):
       batches = 0
       with torch.no_grad():
         for data, target in test_loader:
+          data = data.to(device)
+          target = target.to(device)
           if batches > number_of_test_batches:
             break
           output = network(data)
