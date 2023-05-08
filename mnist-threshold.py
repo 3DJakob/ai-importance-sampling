@@ -118,7 +118,7 @@ class Net(nn.Module):
         self.timestampPlot = []
         
     def getLinearSize (self):
-      testMat = torch.zeros(1, CHANNELS, HEIGHT, WIDTH)
+      testMat = torch.zeros(1, CHANNELS, HEIGHT, WIDTH).to(device)
       testMat = self.convForward(testMat)
       testMat = testMat.flatten()
       size = testMat.size().numel()
