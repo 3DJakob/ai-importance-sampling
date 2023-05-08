@@ -18,20 +18,22 @@ from libs.VarianceReductionCondition import VarianceReductionCondition
 from samplers.samplers import Sampler, uniform, mostLoss, leastLoss, gradientNorm
 from samplers.pickers import pickCdfSamples, pickOrderedSamples, pickRandomSamples
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 sampler = Sampler()
 
 sampler.setSampler(uniform)
-sampler.setPicker(pickCdfSamples)
+sampler.setPicker(pickOrderedSamples)
 
 # Variables to be set by the user
 NETWORKNAME = 'mnist - threshold testing'
 RUNNUMBER = 0
 TIMELIMIT = 30
-SAMPLINGTHRESHOLD = 0.74
-RUNNAME = 'gradient norm CDF cooler %f threshold' % SAMPLINGTHRESHOLD
+SAMPLINGTHRESHOLD = 0.10
+RUNNAME = 'gradient norm %f threshold' % SAMPLINGTHRESHOLD
 STARTINGSAMPLER = uniform
 IMPORTANCESAMPLER = gradientNorm
-NUMBEROFRUNS = 5
+NUMBEROFRUNS = 10
 WARMUPRUNS = 0
 
 # n_epochs = 10
@@ -96,16 +98,16 @@ if (len(trainData.shape) > 3):
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
-        self.maxPool = nn.MaxPool2d(2)
-        self.relu = nn.ReLU()
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.maxPool2 = nn.MaxPool2d(2)
-        self.relu2 = nn.ReLU()
-        self.conv2_drop = nn.Dropout2d()
+        self.conv1 = nn.Conv2d(1, 10, kernel_size=5, device=device)
+        self.maxPool = nn.MaxPool2d(2).to(device)
+        self.relu = nn.ReLU().to(device)
+        self.conv2 = nn.Conv2d(10, 20, kernel_size=5, device=device)
+        self.maxPool2 = nn.MaxPool2d(2).to(device)
+        self.relu2 = nn.ReLU().to(device)
+        self.conv2_drop = nn.Dropout2d().to(device)
         self.linearSize = self.getLinearSize()
-        self.fc1 = nn.Linear(self.linearSize, 50)
-        self.fc2 = nn.Linear(50, 10)
+        self.fc1 = nn.Linear(self.linearSize, 50, device=device)
+        self.fc2 = nn.Linear(50, 10, device=device)
         self.currentTrainingTime = 0
         self.initialLoss = 0
         self.importanceSamplingToggleIndex = 0
@@ -163,6 +165,9 @@ class Net(nn.Module):
           )
           break
 
+        # Move tensors to the GPU
+        data = data.to(device)
+        target = target.to(device)
 
         acc, lossTest = self.test()
         self.accPlot.append(acc)
