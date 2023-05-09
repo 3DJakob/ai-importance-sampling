@@ -18,7 +18,7 @@ from libs.VarianceReductionCondition import VarianceReductionCondition
 from samplers.samplers import Sampler, uniform, mostLoss, leastLoss, gradientNorm
 from samplers.pickers import pickCdfSamples, pickOrderedSamples, pickRandomSamples
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
 
 sampler = Sampler()
 
@@ -28,11 +28,11 @@ sampler.setPicker(pickOrderedSamples)
 # Variables to be set by the user
 NETWORKNAME = 'mnist - threshold testing'
 RUNNUMBER = 0
-TIMELIMIT = 30
+TIMELIMIT = 15
 SAMPLINGTHRESHOLD = 0.10
-RUNNAME = 'gradient norm %f threshold' % SAMPLINGTHRESHOLD
+RUNNAME = 'uniform'
 STARTINGSAMPLER = uniform
-IMPORTANCESAMPLER = gradientNorm
+IMPORTANCESAMPLER = uniform
 NUMBEROFRUNS = 10
 WARMUPRUNS = 0
 
@@ -109,6 +109,7 @@ class Net(nn.Module):
         self.fc1 = nn.Linear(self.linearSize, 50, device=device)
         self.fc2 = nn.Linear(50, 10, device=device)
         self.currentTrainingTime = 0
+        self.batchStartTime = 0
         self.initialLoss = 0
         self.importanceSamplingToggleIndex = 0
 
@@ -148,7 +149,7 @@ class Net(nn.Module):
       batch_idx = 0
 
       # iterate over all batches
-      
+      self.batchStartTime = time.time()
       for batch_idx, (data, target) in enumerate(train_loader):
         if self.currentTrainingTime > TIMELIMIT:
           print('Time limit reached', self.currentTrainingTime)
@@ -169,30 +170,15 @@ class Net(nn.Module):
         data = data.to(device)
         target = target.to(device)
 
+        # end time
+        self.currentTrainingTime += time.time() - self.batchStartTime
+
+        # TESTING DO NOT FACTOR IN TIME
         acc, lossTest = self.test()
         self.accPlot.append(acc)
         self.lossPlot.append(lossTest)
         self.timestampPlot.append(self.currentTrainingTime)
         plot(self.accPlot, None)
-
-        # start time
-        start = time.time()
-
-        # check variance reduction condition
-        # if self.currentTrainingTime > 14:
-        #   sampler.setSampler(gradientNorm)
-
-        [data, target, _] = sampler.sample(data, target, mini_batch_size_train, network)
-
-        optimizer.zero_grad()
-        output = network(data)
-        loss = F.cross_entropy(output, target)
-        loss.backward()
-        optimizer.step()
-
-        # end time
-        self.currentTrainingTime += time.time() - start
-
 
         if batch_idx % log_interval == 0:
           logRun(
@@ -207,14 +193,23 @@ class Net(nn.Module):
             self.importanceSamplingToggleIndex
           )
 
-          print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-            epoch, batch_idx * len(data), len(train_loader.dataset),
-            100. * batch_idx / (train_loader.dataset.data.shape[0] / batch_size_train), loss.item()))
-          train_losses.append(loss.item())
-          train_counter.append(
-            (batch_idx*64) + ((epoch-1)*len(train_loader.dataset)))
-          # torch.save(network.state_dict(), '/results/model.pth')
-          # torch.save(optimizer.state_dict(), '/results/optimizer.pth')
+        # start time
+        self.batchStartTime = time.time()
+
+        # check variance reduction condition
+        # if self.currentTrainingTime > 14:
+        #   sampler.setSampler(gradientNorm)
+
+        [data, target, _] = sampler.sample(data, target, mini_batch_size_train, network)
+
+        optimizer.zero_grad()
+        output = network(data)
+        loss = F.cross_entropy(output, target)
+        loss.backward()
+        optimizer.step()
+
+        # # end time
+        # self.currentTrainingTime += time.time() - start
       
         batch_idx += 1
 
