@@ -11,6 +11,7 @@ from libs.nodes_3d import networkTo3dNodes
 from samplers.samplers import uniform, mostLoss, leastLoss, gradientNorm
 import time
 import h5py
+import torchvision.transforms as transforms
 
 
 from samplers.samplers import Sampler, uniform, mostLoss, leastLoss, gradientNorm
@@ -24,14 +25,14 @@ sampler.setSampler(uniform)
 sampler.setPicker(pickOrderedSamples)
 
 # Variables to be set by the user
-NETWORKNAME = 'mnist - threshold testing'
-RUNNUMBER = 60
-TIMELIMIT = 15
+NETWORKNAME = 'cifar - threshold testing'
+RUNNUMBER = 0
+TIMELIMIT = 400
 SAMPLINGTHRESHOLD = 0.42
-RUNNAME = 'most loss %f threshold' % SAMPLINGTHRESHOLD
+RUNNAME = 'uniform'
 STARTINGSAMPLER = uniform
-IMPORTANCESAMPLER = mostLoss
-NUMBEROFRUNS = 10
+IMPORTANCESAMPLER = uniform
+NUMBEROFRUNS = 5
 WARMUPRUNS = 0
 
 # n_epochs = 10
@@ -39,37 +40,35 @@ batch_size_train = 1024
 mini_batch_size_train = 128
 batch_size_test = 128
 number_of_test_batches = 20
-learning_rate = 0.01
+learning_rate = 0.001
 momentum = 0.5
 log_interval = 300
 api_interval = 300
-test_interval = 0.2
+test_interval = 50
 
 # random_seed = 1
 random_seed = torch.randint(0, 100000, (1,)).item()
 torch.backends.cudnn.enabled = False
 torch.manual_seed(random_seed)
 
-train_loader_mnist = torch.utils.data.DataLoader(
-  torchvision.datasets.MNIST(root='./data', train=True, download=True,
-                             transform=torchvision.transforms.Compose([
-                               torchvision.transforms.ToTensor(),
-                              #  torchvision.transforms.Normalize(
-                              #    (0.1307,), (0.3081,))
-                             ])),
-  batch_size=batch_size_train, shuffle=True)
+# define transforms
+transform = transforms.Compose(
+  [transforms.ToTensor(),
+  transforms.Normalize((0.5, 0.5, 0.5), 
+                       (0.5, 0.5, 0.5))])
 
-test_loader_mnist = torch.utils.data.DataLoader(
-  torchvision.datasets.MNIST(root='./data', train=False, download=True,
-                             transform=torchvision.transforms.Compose([
-                               torchvision.transforms.ToTensor(),
-                              #  torchvision.transforms.Normalize(
-                              #    (0.1307,), (0.3081,))
-                             ])),
-  batch_size=batch_size_test, shuffle=False)
+trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                        download=True, transform=transform)
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size_train,
+                                          shuffle=True, num_workers=0)
 
-train_loader = train_loader_mnist
-test_loader = test_loader_mnist
+testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                      download=True, transform=transform)
+testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size_test,
+                                        shuffle=False, num_workers=0)
+
+train_loader = trainloader
+test_loader = testloader
 
 # check if has .data or ['x']
 trainData = None
@@ -93,17 +92,19 @@ if (len(trainData.shape) > 3):
 
 class Net(nn.Module):
     def __init__(self):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=5, device=device)
-        self.maxPool = nn.MaxPool2d(2).to(device)
-        self.relu = nn.ReLU().to(device)
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5, device=device)
-        self.maxPool2 = nn.MaxPool2d(2).to(device)
-        self.relu2 = nn.ReLU().to(device)
-        self.conv2_drop = nn.Dropout2d().to(device)
-        self.linearSize = self.getLinearSize()
-        self.fc1 = nn.Linear(self.linearSize, 50, device=device)
-        self.fc2 = nn.Linear(50, 10, device=device)
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 32,  kernel_size=3, device=device)
+        self.pool1 = nn.MaxPool2d(2, 2).to(device)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, device=device)
+        self.pool2 = nn.MaxPool2d(2, 2).to(device)
+        self.conv3 = nn.Conv2d(64, 128,kernel_size=3, device=device)
+        self.pool3 = nn.MaxPool2d(2, 2).to(device)
+        # batch norm
+        self.bn1 = nn.BatchNorm2d(32).to(device)
+        
+        self.fc1 = nn.Linear(512, 64, device=device)
+        self.fc2 = nn.Linear(64, 10, device=device)
+        
         self.currentTrainingTime = 0
         self.batchStartTime = 0
         self.initialLoss = 0
@@ -113,27 +114,17 @@ class Net(nn.Module):
         self.lossPlot = []
         self.accPlot = []
         self.timestampPlot = []
-        
-    def getLinearSize (self):
-      testMat = torch.zeros(1, CHANNELS, HEIGHT, WIDTH).to(device)
-      testMat = self.convForward(testMat)
-      testMat = testMat.flatten()
-      size = testMat.size().numel()
-      return size
-
-    def convForward(self, x) -> torch.Tensor:
-      x = self.relu(self.maxPool(self.conv1(x)))
-      # x = self.relu(self.maxPool(self.conv2_drop(self.conv2(x))))
-      x = self.relu(self.maxPool(self.conv2(x)))
-      return x
 
     def forward(self, x):
-        x = self.convForward(x)
-        x = x.view(-1, self.linearSize)
-        x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training)
-        x = self.fc2(x)
-        return F.log_softmax(x, dim=1)
+      x = self.pool1(F.relu(self.conv1(x)))
+      x = self.pool2(F.relu(self.conv2(x)))
+      x = self.pool3(F.relu(self.conv3(x)))
+      #reshape
+      x = x.view(x.size(0), -1)
+      
+      x = F.relu(self.fc1(x))
+      x = self.fc2(x)
+      return x
 
     def trainEpoch(self, epoch):
       network.train()
@@ -170,11 +161,12 @@ class Net(nn.Module):
         self.currentTrainingTime += time.time() - self.batchStartTime
 
         # TESTING DO NOT FACTOR IN TIME
-        acc, lossTest = self.test()
-        self.accPlot.append(acc)
-        self.lossPlot.append(lossTest)
-        self.timestampPlot.append(self.currentTrainingTime)
-        plot(self.accPlot, None)
+        if batch_idx % test_interval == 0:
+          acc, lossTest = self.test()
+          self.accPlot.append(acc)
+          self.lossPlot.append(lossTest)
+          self.timestampPlot.append(self.currentTrainingTime)
+          plot(self.accPlot, None)
 
         if batch_idx % log_interval == 0:
           logRun(
@@ -198,7 +190,8 @@ class Net(nn.Module):
 
         sampleTime = time.time()
         [data, target, _] = sampler.sample(data, target, mini_batch_size_train, network)
-        print('Sample time', time.time() - sampleTime)
+        # print(target)
+        # print('Sample time', time.time() - sampleTime)
 
         optimizer.zero_grad()
         output = network(data)
