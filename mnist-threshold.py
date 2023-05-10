@@ -12,8 +12,6 @@ from samplers.samplers import uniform, mostLoss, leastLoss, gradientNorm
 import time
 import h5py
 
-from libs.VarianceReductionCondition import VarianceReductionCondition 
-
 
 from samplers.samplers import Sampler, uniform, mostLoss, leastLoss, gradientNorm
 from samplers.pickers import pickCdfSamples, pickOrderedSamples, pickRandomSamples
@@ -27,12 +25,12 @@ sampler.setPicker(pickOrderedSamples)
 
 # Variables to be set by the user
 NETWORKNAME = 'mnist - threshold testing'
-RUNNUMBER = 0
+RUNNUMBER = 60
 TIMELIMIT = 15
-SAMPLINGTHRESHOLD = 0.10
-RUNNAME = 'uniform'
+SAMPLINGTHRESHOLD = 0.42
+RUNNAME = 'most loss %f threshold' % SAMPLINGTHRESHOLD
 STARTINGSAMPLER = uniform
-IMPORTANCESAMPLER = uniform
+IMPORTANCESAMPLER = mostLoss
 NUMBEROFRUNS = 10
 WARMUPRUNS = 0
 
@@ -51,8 +49,6 @@ test_interval = 0.2
 random_seed = torch.randint(0, 100000, (1,)).item()
 torch.backends.cudnn.enabled = False
 torch.manual_seed(random_seed)
-
-reductionCondition = VarianceReductionCondition()
 
 train_loader_mnist = torch.utils.data.DataLoader(
   torchvision.datasets.MNIST(root='./data', train=True, download=True,
@@ -200,7 +196,9 @@ class Net(nn.Module):
         # if self.currentTrainingTime > 14:
         #   sampler.setSampler(gradientNorm)
 
+        sampleTime = time.time()
         [data, target, _] = sampler.sample(data, target, mini_batch_size_train, network)
+        print('Sample time', time.time() - sampleTime)
 
         optimizer.zero_grad()
         output = network(data)
