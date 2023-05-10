@@ -216,7 +216,7 @@ class Net(nn.Module):
           if batches > number_of_test_batches:
             break
           output = network(data)
-          test_loss += F.nll_loss(output, target, reduction='sum').item()
+          test_loss += F.cross_entropy(output, target, reduction='sum').item()
           pred = output.data.max(1, keepdim=True)[1]
           correct += pred.eq(target.data.view_as(pred)).sum()
 
