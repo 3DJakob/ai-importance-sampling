@@ -10,8 +10,6 @@ from api import logRun, logNetwork
 from libs.nodes_3d import networkTo3dNodes
 from samplers.samplers import uniform, mostLoss, leastLoss, gradientNorm
 import time
-import h5py
-import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 
 from samplers.samplers import Sampler, uniform, mostLoss, leastLoss, gradientNorm
@@ -52,15 +50,6 @@ random_seed = torch.randint(0, 100000, (1,)).item()
 torch.backends.cudnn.enabled = False
 torch.manual_seed(random_seed)
 
-train_loader_mnist = torch.utils.data.DataLoader(
-  torchvision.datasets.MNIST(root='./data', train=True, download=True,
-                             transform=torchvision.transforms.Compose([
-                               torchvision.transforms.ToTensor(),
-                              #  torchvision.transforms.Normalize(
-                              #    (0.1307,), (0.3081,))
-                             ])),
-  batch_size=batch_size_train, shuffle=True)
-
 test_loader_mnist = torch.utils.data.DataLoader(
   torchvision.datasets.MNIST(root='./data', train=False, download=True,
                              transform=torchvision.transforms.Compose([
@@ -69,8 +58,6 @@ test_loader_mnist = torch.utils.data.DataLoader(
                               #    (0.1307,), (0.3081,))
                              ])),
   batch_size=batch_size_test, shuffle=False)
-
-train_loader = train_loader_mnist
 test_loader = test_loader_mnist
 
 
@@ -176,7 +163,6 @@ class Net(nn.Module):
       # iterate over all batches
       self.batchStartTime = time.time()
       for batch_idx, (data, target, relativeIndex) in enumerate(train_loader):
-        print(relativeIndex, 'relativeIndex')
         if self.currentTrainingTime > TIMELIMIT:
           print('Time limit reached', self.currentTrainingTime)
           logRun(
@@ -228,7 +214,7 @@ class Net(nn.Module):
 
         sampleTime = time.time()
         [data, target, _, idx] = sampler.sample(data, target, mini_batch_size_train, network)
-        usageLogger.log(relativeIndex[idx])
+        usageLogger.log(relativeIndex[idx], relativeIndex)
         print('Sample time', time.time() - sampleTime)
 
         optimizer.zero_grad()
@@ -272,9 +258,6 @@ class Net(nn.Module):
           sampler.setSampler(IMPORTANCESAMPLER)
           self.importanceSamplingToggleIndex = len(self.lossPlot)
 
-      # print('\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-      #   test_loss, correct, (batch_size_test * batches),
-      #   100. * correct / (batch_size_test * batches)))
       accTensor = correct / (batch_size_test * batches)
       return accTensor.item(), test_loss
     
