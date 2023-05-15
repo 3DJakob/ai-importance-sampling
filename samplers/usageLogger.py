@@ -7,12 +7,12 @@ class UsageLogger:
     # create tensor for logging with size of dataset
     self.data = torch.zeros(datasetSize)
   
-  def log(self, indexes):
+  def log(self, picked, all):
     # add one to indexes in data tensor
-    self.data[indexes] += 1
+    self.data[picked] += 2
 
     # subtract one from all other indexes in data tensor
-    self.data[~indexes] -= 1
+    self.data[all] -= 1
   
   def getImportantSampleIndexes(self):
     # get indexes of 10 most important samples
@@ -27,8 +27,19 @@ class UsageLogger:
   def saveSamplesToPNG(self, dataset, amount = 10):
     importantIndexes = self.getImportantSampleIndexes()
     unimportantIndexes = self.getUnimportantSampleIndexes()
+    intData = self.data.int()
+
+    min = intData.min().item()
+    max = intData.max().item()
+
+    for i in range(min, max):
+      print(i, 'count ', torch.sum(intData == i))
+
+    print('Important sample amount ', self.data[importantIndexes])
+    print('Unimportant sample amount ', self.data[unimportantIndexes])
+
     # save amount of samples to png
-    for i in range(0, 10):
+    for i in range(0, amount):
       image = dataset[importantIndexes[i]]
       plt.imsave('important-samples/iimage' + str(i) + '.png', image, cmap='gray')
       imageunimportant = dataset[unimportantIndexes[i]]
