@@ -11,7 +11,7 @@ class Sampler:
       self.sampler = uniform
 
     def sample(self, data, target, mini_batch_size, network):
-      importance = self.sampler(data, target, network)
+      importance = self.sampler(data, target, network).cpu()
 
       # indexes for sorting by importance
       importanceIndexes = torch.argsort(importance, descending=True)
@@ -20,7 +20,17 @@ class Sampler:
       target = target[importanceIndexes][pickerIndexes]
       data = data[importanceIndexes][pickerIndexes]
 
-      return data, target, importance[importanceIndexes][pickerIndexes]
+      # check max of pickerIndexes larger than data.shape[0]
+      if pickerIndexes.max().item() >= importance.shape[0]:
+        print(pickerIndexes.max().item(), 'pickerIndexes.max() >= data.shape[0]', importance.shape[0])
+        # print(pickerIndexes)
+
+
+      if importanceIndexes.max().item() >= importance.shape[0]:
+        print(importanceIndexes.max().item(), 'importanceIndexes.max() >= data.shape[0]', importance.shape[0])
+        # print(importanceIndexes)
+
+      return data, target, importance[importanceIndexes][pickerIndexes], importanceIndexes[pickerIndexes]
     
     def setSampler (self, sampler):
       self.sampler = sampler

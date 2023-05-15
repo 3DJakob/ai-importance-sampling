@@ -22,16 +22,16 @@ device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.b
 sampler = Sampler()
 
 sampler.setSampler(uniform)
-sampler.setPicker(pickOrderedSamples)
 
 # Variables to be set by the user
+sampler.setPicker(pickCdfSamples)
 NETWORKNAME = 'cifar - threshold testing'
-RUNNUMBER = 0
+RUNNUMBER = 35
 TIMELIMIT = 400
 SAMPLINGTHRESHOLD = 0.42
-RUNNAME = 'uniform'
+RUNNAME = 'most loss %f threshold' % SAMPLINGTHRESHOLD
 STARTINGSAMPLER = uniform
-IMPORTANCESAMPLER = uniform
+IMPORTANCESAMPLER = mostLoss
 NUMBEROFRUNS = 5
 WARMUPRUNS = 0
 

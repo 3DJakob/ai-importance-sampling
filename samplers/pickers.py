@@ -10,6 +10,13 @@ def pickCdfSamples(importances, num_samples):
     # Convert to PyTorch tensor
     indices = torch.tensor(indices, dtype=torch.long)
   
+    # prevent out of bounds
+    if indices.max().item() >= importances.shape[0]:
+        print(indices.max().item(), 'indices.max() >= data.shape[0]', importances.shape[0])
+        # print(indices)
+        indices = indices[indices < importances.shape[0]]
+        # print(indices)
+
     return indices
 
 def pickOrderedSamples (importances, mini_batch_size):
