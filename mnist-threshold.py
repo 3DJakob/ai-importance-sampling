@@ -11,10 +11,12 @@ from libs.nodes_3d import networkTo3dNodes
 from samplers.samplers import uniform, mostLoss, leastLoss, gradientNorm
 import time
 import h5py
-
+import matplotlib.pyplot as plt
+from torch.utils.data import Dataset, DataLoader
 
 from samplers.samplers import Sampler, uniform, mostLoss, leastLoss, gradientNorm
 from samplers.pickers import pickCdfSamples, pickOrderedSamples, pickRandomSamples
+from samplers.usageLogger import UsageLogger
 
 device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
 
@@ -71,6 +73,31 @@ test_loader_mnist = torch.utils.data.DataLoader(
 train_loader = train_loader_mnist
 test_loader = test_loader_mnist
 
+
+class MyDataset(Dataset):
+  def __init__(self):
+    self.mnist = torchvision.datasets.MNIST(root='./data', train=True, download=True,
+                            transform=torchvision.transforms.Compose([
+                              torchvision.transforms.ToTensor(),
+                            #  torchvision.transforms.Normalize(
+                            #    (0.1307,), (0.3081,))
+                            ]))
+    
+  def __getitem__(self, index):
+    data, target = self.mnist[index] 
+    return data, target, index
+
+  def __len__(self):
+    return len(self.mnist)
+  
+  def data(self):
+    return self.mnist.data
+
+dataset = MyDataset()
+train_loader = DataLoader(dataset,
+                    batch_size=batch_size_train, shuffle=True)
+
+
 # check if has .data or ['x']
 trainData = None
 if (hasattr(train_loader.dataset, 'data')):
@@ -82,11 +109,13 @@ if trainData is None:
   raise Exception('Could not find train data')
 
 CHANNELS = 1
-HEIGHT = trainData.shape[1]
-WIDTH = trainData.shape[2]
+HEIGHT = trainData().shape[1]
+WIDTH = trainData().shape[2]
 
-if (len(trainData.shape) > 3):
-  CHANNELS = trainData.shape[3]
+if (len(trainData().shape) > 3):
+  CHANNELS = trainData().shape[3]
+
+usageLogger = UsageLogger(len(train_loader.dataset))
 
 # examples = enumerate(test_loader)
 # batch_idx, (example_data, example_targets) = next(examples)
@@ -146,7 +175,8 @@ class Net(nn.Module):
 
       # iterate over all batches
       self.batchStartTime = time.time()
-      for batch_idx, (data, target) in enumerate(train_loader):
+      for batch_idx, (data, target, relativeIndex) in enumerate(train_loader):
+        print(relativeIndex, 'relativeIndex')
         if self.currentTrainingTime > TIMELIMIT:
           print('Time limit reached', self.currentTrainingTime)
           logRun(
@@ -197,7 +227,8 @@ class Net(nn.Module):
         #   sampler.setSampler(gradientNorm)
 
         sampleTime = time.time()
-        [data, target, _] = sampler.sample(data, target, mini_batch_size_train, network)
+        [data, target, _, idx] = sampler.sample(data, target, mini_batch_size_train, network)
+        usageLogger.log(relativeIndex[idx])
         print('Sample time', time.time() - sampleTime)
 
         optimizer.zero_grad()
@@ -301,6 +332,8 @@ print('Starting training')
 epoch = 1
 while True:
   if network.currentTrainingTime > TIMELIMIT:
+    # show the most important samples
+    usageLogger.saveSamplesToPNG(train_loader.dataset.data(), 10)
     network.reset()
     epoch = 1 
     print('Starting new run', RUNNUMBER)
