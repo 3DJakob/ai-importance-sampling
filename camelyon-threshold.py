@@ -12,7 +12,7 @@ from samplers.samplers import uniform, mostLoss, leastLoss, gradientNorm
 import time
 import h5py
 import torchvision.transforms as transforms
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
 
 from samplers.samplers import Sampler, uniform, mostLoss, leastLoss, gradientNorm
 from samplers.pickers import pickCdfSamples, pickOrderedSamples, pickRandomSamples
@@ -27,7 +27,7 @@ sampler.setSampler(uniform)
 
 # Variables to be set by the user
 sampler.setPicker(pickCdfSamples)
-NETWORKNAME = 'cifar - threshold testing2'
+NETWORKNAME = 'camelyon - threshold testing'
 RUNNUMBER = 30
 TIMELIMIT = 400
 SAMPLINGTHRESHOLD = 0.50
@@ -47,7 +47,7 @@ learning_rate = 0.001
 momentum = 0.5
 log_interval = 300
 api_interval = 300
-test_interval = 50
+test_interval = 10
 
 # random_seed = 1
 random_seed = torch.randint(0, 100000, (1,)).item()
@@ -60,17 +60,21 @@ transform = transforms.Compose(
   transforms.Normalize((0.5, 0.5, 0.5), 
                        (0.5, 0.5, 0.5))])
 
-testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                      download=True, transform=transform)
-testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size_test,
-                                        shuffle=False, num_workers=0)
+# Define the train and test sizes for splitting
+dataset = torchvision.datasets.PCAM(root='./data', download=True, transform=transform)
+train_size = int(0.8 * len(dataset))  # 80% of the data for training
+test_size = len(dataset) - train_size  # Remaining 20% of the data for testing
+# Split the dataset into training and testing sets
+train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
 
 class MyDataset(Dataset):
   def __init__(self):
-    self.dataset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                        download=True, transform=transform)
-    
+    self.dataset = train_dataset
+    self.width = self.dataset[0][0].shape[1]
+    self.height = self.dataset[0][0].shape[2]
+    self.channels = self.dataset[0][0].shape[0]
+
   def __getitem__(self, index):
     data, target = self.dataset[index] 
     return data, target, index
@@ -81,27 +85,26 @@ class MyDataset(Dataset):
   def data(self):
     return self.dataset.data
 
-dataset = MyDataset()
-train_loader = DataLoader(dataset,
+
+custom_dataset = MyDataset()
+train_loader = DataLoader(custom_dataset,
                     batch_size=batch_size_train, shuffle=True)
-test_loader = testloader
+test_loader = DataLoader(test_dataset,
+                    batch_size=batch_size_test, shuffle=True)
 
 # check if has .data or ['x']
 trainData = None
 if (hasattr(train_loader.dataset, 'data')):
-  trainData = train_loader.dataset.data()
+  trainData = train_loader.dataset.data
 else:
   trainData = train_loader.dataset['x']
 
 if trainData is None:
   raise Exception('Could not find train data')
 
-CHANNELS = 1
-HEIGHT = trainData.shape[1]
-WIDTH = trainData.shape[2]
-
-if (len(trainData.shape) > 3):
-  CHANNELS = trainData.shape[3]
+HEIGHT = custom_dataset.height
+WIDTH = custom_dataset.width
+CHANNELS = custom_dataset.channels
 
 usageLogger = UsageLogger(len(train_loader.dataset))
 
@@ -111,17 +114,12 @@ usageLogger = UsageLogger(len(train_loader.dataset))
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv2d(3, 32,  kernel_size=3, device=device)
-        self.pool1 = nn.MaxPool2d(2, 2).to(device)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, device=device)
-        self.pool2 = nn.MaxPool2d(2, 2).to(device)
-        self.conv3 = nn.Conv2d(64, 128,kernel_size=3, device=device)
-        self.pool3 = nn.MaxPool2d(2, 2).to(device)
-        # batch norm
-        self.bn1 = nn.BatchNorm2d(32).to(device)
-        
-        self.fc1 = nn.Linear(512, 64, device=device)
-        self.fc2 = nn.Linear(64, 10, device=device)
+        self.conv1 = nn.Conv2d(CHANNELS, 10, kernel_size=5, device=device)
+        self.conv2 = nn.Conv2d(10, 20, kernel_size=5, device=device)
+        self.conv2_drop = nn.Dropout2d().to(device)
+        self.linearSize = self.getLinearSize()
+        self.fc1 = nn.Linear(self.linearSize, 50, device=device)
+        self.fc2 = nn.Linear(50, 2, device=device)
         
         self.currentTrainingTime = 0
         self.batchStartTime = 0
@@ -133,16 +131,26 @@ class Net(nn.Module):
         self.accPlot = []
         self.timestampPlot = []
 
-    def forward(self, x):
-      x = self.pool1(F.relu(self.conv1(x)))
-      x = self.pool2(F.relu(self.conv2(x)))
-      x = self.pool3(F.relu(self.conv3(x)))
-      #reshape
-      x = x.view(x.size(0), -1)
-      
-      x = F.relu(self.fc1(x))
-      x = self.fc2(x)
+    def getLinearSize (self):
+      testMat = torch.zeros(1, CHANNELS, HEIGHT, WIDTH)
+      testMat = testMat.to(device)
+      testMat = self.convForward(testMat)
+      testMat = testMat.flatten()
+      size = testMat.size().numel()
+      return size
+    
+    def convForward(self, x) -> torch.Tensor:
+      x = F.relu(F.max_pool2d(self.conv1(x), 2).to(device))
+      x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2).to(device))
       return x
+
+    def forward(self, x):
+        x = self.convForward(x)
+        x = x.view(-1, self.linearSize)
+        x = F.relu(self.fc1(x))
+        x = F.dropout(x, training=self.training)
+        x = self.fc2(x)
+        return F.log_softmax(x, dim=1)
 
     def trainEpoch(self, epoch):
       network.train()
@@ -288,15 +296,15 @@ print('Starting training')
 # train_loader = gradientLossSortTrainLoader(train_loader, network, optimizer, batch_size_train)
 # train_loader = equalLossTrainLoader(train_loader, network, batch_size_train)
 
-# logNetwork(
-#   batch_size_train,
-#   batch_size_test,
-#   NETWORKNAME,
-#   learning_rate,
-#   'adam',
-#   'cross entropy',
-#   'custom',
-# )
+logNetwork(
+  batch_size_train,
+  batch_size_test,
+  NETWORKNAME,
+  learning_rate,
+  'adam',
+  'cross entropy',
+  'custom',
+)
 
 
 # for epoch in range(1, n_epochs + 1):
