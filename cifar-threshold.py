@@ -12,10 +12,12 @@ from samplers.samplers import uniform, mostLoss, leastLoss, gradientNorm
 import time
 import h5py
 import torchvision.transforms as transforms
-
+from torch.utils.data import Dataset, DataLoader
 
 from samplers.samplers import Sampler, uniform, mostLoss, leastLoss, gradientNorm
 from samplers.pickers import pickCdfSamples, pickOrderedSamples, pickRandomSamples
+
+from samplers.usageLogger import UsageLogger
 
 device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
 
@@ -25,14 +27,15 @@ sampler.setSampler(uniform)
 
 # Variables to be set by the user
 sampler.setPicker(pickCdfSamples)
-NETWORKNAME = 'cifar - threshold testing'
-RUNNUMBER = 35
+NETWORKNAME = 'cifar - threshold testing2'
+RUNNUMBER = 30
 TIMELIMIT = 400
-SAMPLINGTHRESHOLD = 0.42
+SAMPLINGTHRESHOLD = 0.50
 RUNNAME = 'most loss %f threshold' % SAMPLINGTHRESHOLD
+# RUNNAME = 'uniform'
 STARTINGSAMPLER = uniform
 IMPORTANCESAMPLER = mostLoss
-NUMBEROFRUNS = 5
+NUMBEROFRUNS = 1
 WARMUPRUNS = 0
 
 # n_epochs = 10
@@ -57,23 +60,36 @@ transform = transforms.Compose(
   transforms.Normalize((0.5, 0.5, 0.5), 
                        (0.5, 0.5, 0.5))])
 
-trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                        download=True, transform=transform)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size_train,
-                                          shuffle=True, num_workers=0)
-
 testset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                       download=True, transform=transform)
 testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size_test,
                                         shuffle=False, num_workers=0)
 
-train_loader = trainloader
+
+class MyDataset(Dataset):
+  def __init__(self):
+    self.dataset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                        download=True, transform=transform)
+    
+  def __getitem__(self, index):
+    data, target = self.dataset[index] 
+    return data, target, index
+
+  def __len__(self):
+    return len(self.dataset)
+  
+  def data(self):
+    return self.dataset.data
+
+dataset = MyDataset()
+train_loader = DataLoader(dataset,
+                    batch_size=batch_size_train, shuffle=True)
 test_loader = testloader
 
 # check if has .data or ['x']
 trainData = None
 if (hasattr(train_loader.dataset, 'data')):
-  trainData = train_loader.dataset.data
+  trainData = train_loader.dataset.data()
 else:
   trainData = train_loader.dataset['x']
 
@@ -86,6 +102,8 @@ WIDTH = trainData.shape[2]
 
 if (len(trainData.shape) > 3):
   CHANNELS = trainData.shape[3]
+
+usageLogger = UsageLogger(len(train_loader.dataset))
 
 # examples = enumerate(test_loader)
 # batch_idx, (example_data, example_targets) = next(examples)
@@ -137,7 +155,7 @@ class Net(nn.Module):
 
       # iterate over all batches
       self.batchStartTime = time.time()
-      for batch_idx, (data, target) in enumerate(train_loader):
+      for batch_idx, (data, target, relativeIndex) in enumerate(train_loader):
         if self.currentTrainingTime > TIMELIMIT:
           print('Time limit reached', self.currentTrainingTime)
           logRun(
@@ -184,23 +202,14 @@ class Net(nn.Module):
         # start time
         self.batchStartTime = time.time()
 
-        # check variance reduction condition
-        # if self.currentTrainingTime > 14:
-        #   sampler.setSampler(gradientNorm)
-
-        sampleTime = time.time()
-        [data, target, _] = sampler.sample(data, target, mini_batch_size_train, network)
-        # print(target)
-        # print('Sample time', time.time() - sampleTime)
-
+        [data, target, _, idx] = sampler.sample(data, target, mini_batch_size_train, network)
+        # usageLogger.log(relativeIndex[idx], relativeIndex)
+        
         optimizer.zero_grad()
         output = network(data)
         loss = F.cross_entropy(output, target)
         loss.backward()
         optimizer.step()
-
-        # # end time
-        # self.currentTrainingTime += time.time() - start
       
         batch_idx += 1
 
@@ -294,6 +303,8 @@ print('Starting training')
 epoch = 1
 while True:
   if network.currentTrainingTime > TIMELIMIT:
+    # show the most important samples
+    # usageLogger.saveSamplesToPNG(train_loader.dataset.data(), 10)
     network.reset()
     epoch = 1 
     print('Starting new run', RUNNUMBER)
