@@ -41,7 +41,21 @@ class UsageLogger:
     # save amount of samples to png
     for i in range(0, amount):
       image = dataset[importantIndexes[i]]
-      plt.imsave('important-samples/iimage' + str(i) + '.png', image, cmap='gray')
       imageunimportant = dataset[unimportantIndexes[i]]
-      plt.imsave('important-samples/uimage' + str(i) + '.png', imageunimportant, cmap='gray')
+
+      if (isinstance(image, tuple)):
+        image = image[0]
+        imageunimportant = imageunimportant[0]
+    
+      # check if image is grayscale or rgb
+      if (image.shape[0] == 3):
+        image = image.permute(1, 2, 0).numpy()
+        imageunimportant = imageunimportant.permute(1, 2, 0).numpy()
+        image = ((image - image.min()) / (image.max() - image.min()) * 255).astype('uint8')
+        imageunimportant = ((imageunimportant - imageunimportant.min()) / (imageunimportant.max() - imageunimportant.min()) * 255).astype('uint8')
+        plt.imsave('important-samples/iimage' + str(i) + '.png', image)
+        plt.imsave('important-samples/uimage' + str(i) + '.png', imageunimportant)
+      else:
+        plt.imsave('important-samples/iimage' + str(i) + '.png', image, cmap='gray')
+        plt.imsave('important-samples/uimage' + str(i) + '.png', imageunimportant, cmap='gray')
 
