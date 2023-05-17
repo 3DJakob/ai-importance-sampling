@@ -84,7 +84,7 @@ class MyDataset(Dataset):
     return len(self.dataset)
   
   def data(self):
-    return self.dataset.data
+    return self.dataset.dataset
 
 
 custom_dataset = MyDataset()
