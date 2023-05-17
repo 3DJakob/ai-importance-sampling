@@ -28,15 +28,16 @@ sampler.setSampler(uniform)
 # Variables to be set by the user
 sampler.setPicker(pickCdfSamples)
 NETWORKNAME = 'camelyon - threshold testing'
-RUNNUMBER = 30
+RUNNUMBER = 10
 TIMELIMIT = 400
-SAMPLINGTHRESHOLD = 0.50
+SAMPLINGTHRESHOLD = 0.75
 RUNNAME = 'most loss %f threshold' % SAMPLINGTHRESHOLD
 # RUNNAME = 'uniform'
 STARTINGSAMPLER = uniform
 IMPORTANCESAMPLER = mostLoss
 NUMBEROFRUNS = 1
 WARMUPRUNS = 0
+USEAPI = False
 
 # n_epochs = 10
 batch_size_train = 1024
@@ -166,17 +167,18 @@ class Net(nn.Module):
       for batch_idx, (data, target, relativeIndex) in enumerate(train_loader):
         if self.currentTrainingTime > TIMELIMIT:
           print('Time limit reached', self.currentTrainingTime)
-          logRun(
-            self.timestampPlot,
-            [],
-            self.accPlot,
-            [],
-            self.lossPlot,
-            NETWORKNAME,
-            RUNNUMBER,
-            RUNNAME,
-            self.importanceSamplingToggleIndex
-          )
+          if USEAPI:
+            logRun(
+              self.timestampPlot,
+              [],
+              self.accPlot,
+              [],
+              self.lossPlot,
+              NETWORKNAME,
+              RUNNUMBER,
+              RUNNAME,
+              self.importanceSamplingToggleIndex
+            )
           break
 
         # Move tensors to the GPU
@@ -195,17 +197,18 @@ class Net(nn.Module):
           plot(self.accPlot, None)
 
         if batch_idx % log_interval == 0:
-          logRun(
-            self.timestampPlot,
-            [],
-            self.accPlot,
-            [],
-            self.lossPlot,
-            NETWORKNAME,
-            RUNNUMBER,
-            RUNNAME,
-            self.importanceSamplingToggleIndex
-          )
+          if USEAPI:
+            logRun(
+              self.timestampPlot,
+              [],
+              self.accPlot,
+              [],
+              self.lossPlot,
+              NETWORKNAME,
+              RUNNUMBER,
+              RUNNAME,
+              self.importanceSamplingToggleIndex
+            )
 
         # start time
         self.batchStartTime = time.time()
@@ -296,15 +299,16 @@ print('Starting training')
 # train_loader = gradientLossSortTrainLoader(train_loader, network, optimizer, batch_size_train)
 # train_loader = equalLossTrainLoader(train_loader, network, batch_size_train)
 
-logNetwork(
-  batch_size_train,
-  batch_size_test,
-  NETWORKNAME,
-  learning_rate,
-  'adam',
-  'cross entropy',
-  'custom',
-)
+if USEAPI:
+  logNetwork(
+    batch_size_train,
+    batch_size_test,
+    NETWORKNAME,
+    learning_rate,
+    'adam',
+    'cross entropy',
+    'custom',
+  )
 
 
 # for epoch in range(1, n_epochs + 1):
